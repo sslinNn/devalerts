@@ -1,4 +1,4 @@
-# devalerts (throwaway prototype)
+# devalerts
 
 [Русская версия](README.ru.md)
 
@@ -86,7 +86,7 @@ Only exceptions that actually escape as server errors get reported — routing
 404s and raised `HTTPException`s are already turned into responses by the
 framework before the middleware sees them.
 
-## What this does NOT do (by design — it's a throwaway prototype)
+## What this does NOT do (by design)
 
 - Grouping/rate limiting is local and in-process only (SQLite file, no
   server) — the dashboard is a CLI table, not a web UI.

@@ -3,6 +3,8 @@ name = "devalerts"
 version = "0.1.3"
 description = "Send unhandled Python exceptions straight to a Telegram chat. No backend, no account, no database — just your own bot token."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "sslinNn", email = "morison1991@mail.ru" }
 ]
