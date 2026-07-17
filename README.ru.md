@@ -1,9 +1,12 @@
 # devalerts
 
 [![PyPI](https://img.shields.io/pypi/v/devalerts)](https://pypi.org/project/devalerts/)
+[![Downloads](https://img.shields.io/pypi/dm/devalerts)](https://pypi.org/project/devalerts/)
 [![Python versions](https://img.shields.io/pypi/pyversions/devalerts)](https://pypi.org/project/devalerts/)
 [![License: MIT](https://img.shields.io/pypi/l/devalerts)](LICENSE)
-[![Tests](https://github.com/sslinNn/devalerts/actions/workflows/test.yml/badge.svg)](https://github.com/sslinNn/devalerts/actions/workflows/test.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/sslinNn/devalerts/test.yml?branch=main&label=tests)](https://github.com/sslinNn/devalerts/actions/workflows/test.yml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![mypy](https://img.shields.io/badge/mypy-checked-blue)](https://mypy-lang.org/)
 
 [English version](README.md)
 
@@ -79,14 +82,7 @@ devalerts.init(bot_token="...", chat_id=123456789, rate_limit_seconds=60)
 uv run devalerts dashboard
 ```
 
-```
-  ID        TYPE          LOCATION                            LAST SEEN TOTAL   STATUS
-  ────────────────────────────────────────────────────────────────────────────────────
-  a1b2c3d4  ValueError    app/orders.py:42                     2m ago       14   ● limited
-  9f8e7d6c  KeyError      app/handlers/webhook.py:88            just now      1   ● sending
-
-  2 error groups, 1 currently rate-limited.
-```
+![вывод devalerts dashboard](https://raw.githubusercontent.com/sslinNn/devalerts/main/docs/dashboard.svg)
 
 ## Ручная отправка пойманного исключения
 
@@ -126,11 +122,13 @@ app.add_middleware(devalerts.ASGIMiddleware)
 роутинговые 404 и явно поднятые `HTTPException` фреймворк уже превращает в
 ответ до того, как их увидит мидлварь.
 
-## devalerts против полноценного трекера ошибок
+## Почему не Sentry
 
 Если у вас уже настроен Sentry/Rollbar/аналог — продолжайте им пользоваться,
-это не замена. devalerts — для пет-проекта, внутреннего инструмента или
-небольшого сервиса, у которого такой инфраструктуры ещё нет (и не нужна):
+devalerts не замена. Это инструмент для пет-проекта, внутреннего сервиса или
+небольшого продукта, у которого такой инфраструктуры ещё нет (и не нужна):
+не нужен аккаунт, не нужен конфиг SDK, не нужно доверять чужому серверу —
+только токен бота, который вы сами создали и контролируете.
 
 |                            | devalerts           | трекер вроде Sentry |
 |----------------------------|----------------------|-----------------------|
@@ -140,13 +138,55 @@ app.add_middleware(devalerts.ASGIMiddleware)
 | Группировка / rate limiting | да, локальный SQLite | да, на стороне сервера |
 | Поиск, тренды, релизы       | нет                  | да |
 
+## FAQ
+
+**Работает с FastAPI / Starlette?**
+Да — используйте [`ASGIMiddleware`](#fastapi--starlette--любое-asgi-приложение),
+поскольку стандартный excepthook не видит ошибок внутри запроса.
+
+**Работает в Docker?**
+Да, ничего специфичного для контейнеров. Убедитесь, что `~/.devalerts/`
+(файл состояния для дедупликации) доступен на запись внутри контейнера или
+смонтирован как volume, если хотите, чтобы состояние переживало рестарты —
+иначе он просто пересоздастся с нуля.
+
+**Работает с потоками (threads)?**
+Да — `init()` ставит и `sys.excepthook`, и `threading.excepthook`.
+
+**Работает с Celery / фоновыми воркерами?**
+Да, вызывайте `init()` в процессе воркера так же, как в веб-процессе. Для
+задач, которые сами оборачиваете в try/except, используйте `report()` или
+`@devalerts.capture()`.
+
+**Работает на Windows / Linux / macOS?**
+Да — только stdlib (`urllib`, `sqlite3`, `threading`), без платформенно-
+специфичного кода.
+
+## Приватность и безопасность
+
+- Единственный сетевой запрос, который делает devalerts — к
+  `api.telegram.org`. Никакой телеметрии, никакой аналитики, больше никуда
+  ничего не уходит.
+- Нет стороннего сервера и нет бэкенда от devalerts — сообщения летят прямо
+  из вашего процесса в вашего же Telegram-бота.
+- Нет аккаунтов, нет регистрации, нет никакого API-ключа, кроме токена бота,
+  который вы сами создали и контролируете.
+- Только базовая редакция секретов (несколько частых паттернов токенов) — не
+  полагайтесь на неё для чувствительных production-данных; то, что можно,
+  зачищайте до того, как оно попадёт в текст исключения.
+
 ## Чего это НЕ делает (осознанно)
 
 - Группировка/rate limiting — только локально и внутри процесса (SQLite-файл,
   без сервера), дашборд — CLI-таблица, а не веб-интерфейс.
 - Нет бэкенда, нет аккаунтов — каждый пользователь запускает своего бота.
-- Только базовая редакция секретов (несколько частых паттернов токенов) — не
-  полагайтесь на неё для чувствительных production-данных.
+
+## Планы
+
+- Веб-дашборд (хостинговый, опционально — локальный CLI-дашборд в любом случае остаётся)
+- Доставка в Slack
+- Доставка в Discord
+- Доставка на email
 
 ## Разработка
 

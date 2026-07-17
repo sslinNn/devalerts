@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="788" height="200" viewBox="0 0 788 200" font-family="SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace" font-size="14">
+<rect width="788" height="200" rx="8" fill="#1e1e1e"/>
+<rect width="788" height="28" rx="8" fill="#323232"/>
+<rect width="788" height="14" y="14" fill="#323232"/>
+<circle cx="20" cy="14" r="6" fill="#ff5f56"/>
+<circle cx="40" cy="14" r="6" fill="#ffbd2e"/>
+<circle cx="60" cy="14" r="6" fill="#27c93f"/>
+<text x="394" y="18" fill="#9a9a9a" font-size="12" text-anchor="middle">devalerts dashboard</text>
+<text x="16" y="44" xml:space="preserve" textLength="730.8" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4" font-weight="bold">  ID        TYPE          LOCATION                            LAST SEEN  TOTAL   STATUS</tspan></text>
+<text x="16" y="64" xml:space="preserve" textLength="730.8" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  ─────────────────────────────────────────────────────────────────────────────────────</tspan></text>
+<text x="16" y="84" xml:space="preserve" textLength="756.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  </tspan><tspan fill="#d4d4d4" opacity="0.6">9f8e7d6c</tspan><tspan fill="#d4d4d4">  KeyError      app/handlers/webhook.py:88          just now       1   </tspan><tspan fill="#ff6b6b">● limited</tspan></text>
+<text x="16" y="104" xml:space="preserve" textLength="756.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  </tspan><tspan fill="#d4d4d4" opacity="0.6">a1b2c3d4</tspan><tspan fill="#d4d4d4">  ValueError    app/orders.py:42                    2m ago        14   </tspan><tspan fill="#ff6b6b">● limited</tspan></text>
+<text x="16" y="124" xml:space="preserve" textLength="756.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">  </tspan><tspan fill="#d4d4d4" opacity="0.6">3c2b1a0f</tspan><tspan fill="#d4d4d4">  TimeoutError  app/workers/sync.py:117             2h ago         6   </tspan><tspan fill="#54d17b">● sending</tspan></text>
+<text x="16" y="144" xml:space="preserve" textLength="1.0" lengthAdjust="spacingAndGlyphs"></text>
+<text x="16" y="164" xml:space="preserve" textLength="344.4" lengthAdjust="spacingAndGlyphs"><tspan fill="#d4d4d4">3 error groups, 2 currently rate-limited.</tspan></text>
+</svg>

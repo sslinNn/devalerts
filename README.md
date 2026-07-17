@@ -1,9 +1,12 @@
 # devalerts
 
 [![PyPI](https://img.shields.io/pypi/v/devalerts)](https://pypi.org/project/devalerts/)
+[![Downloads](https://img.shields.io/pypi/dm/devalerts)](https://pypi.org/project/devalerts/)
 [![Python versions](https://img.shields.io/pypi/pyversions/devalerts)](https://pypi.org/project/devalerts/)
 [![License: MIT](https://img.shields.io/pypi/l/devalerts)](LICENSE)
-[![Tests](https://github.com/sslinNn/devalerts/actions/workflows/test.yml/badge.svg)](https://github.com/sslinNn/devalerts/actions/workflows/test.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/sslinNn/devalerts/test.yml?branch=main&label=tests)](https://github.com/sslinNn/devalerts/actions/workflows/test.yml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![mypy](https://img.shields.io/badge/mypy-checked-blue)](https://mypy-lang.org/)
 
 [Русская версия](README.ru.md)
 
@@ -77,14 +80,7 @@ See what's grouped and what's currently rate-limited:
 uv run devalerts dashboard
 ```
 
-```
-  ID        TYPE          LOCATION                            LAST SEEN TOTAL   STATUS
-  ────────────────────────────────────────────────────────────────────────────────────
-  a1b2c3d4  ValueError    app/orders.py:42                     2m ago       14   ● limited
-  9f8e7d6c  KeyError      app/handlers/webhook.py:88            just now      1   ● sending
-
-  2 error groups, 1 currently rate-limited.
-```
+![devalerts dashboard output](https://raw.githubusercontent.com/sslinNn/devalerts/main/docs/dashboard.svg)
 
 ## Manually reporting a caught exception
 
@@ -125,11 +121,12 @@ Only exceptions that actually escape as server errors get reported — routing
 404s and raised `HTTPException`s are already turned into responses by the
 framework before the middleware sees them.
 
-## devalerts vs. a full error tracker
+## Why not Sentry?
 
-If you already run Sentry/Rollbar/etc., keep using it — this isn't a
-replacement. devalerts is for the side project, internal tool, or small
-service that doesn't have (and doesn't want) that infrastructure yet:
+If you already run Sentry/Rollbar/etc., keep using it — devalerts isn't a
+replacement. It's for the side project, internal tool, or small service that
+doesn't have (and doesn't want) that infrastructure: no account to create, no
+SDK to configure, no server to trust — just a bot token you already control.
 
 |                          | devalerts          | Sentry-style tracker |
 |--------------------------|---------------------|-----------------------|
@@ -139,13 +136,52 @@ service that doesn't have (and doesn't want) that infrastructure yet:
 | Grouping / rate limiting | yes, local SQLite   | yes, server-side |
 | Search, trends, releases | no                  | yes |
 
+## FAQ
+
+**Works with FastAPI / Starlette?**
+Yes — use [`ASGIMiddleware`](#fastapi--starlette--any-asgi-app), since the
+default excepthook never sees request errors.
+
+**Works with Docker?**
+Yes, nothing container-specific. Just make sure `~/.devalerts/` (the dedup
+state file) is either writable inside the container or a mounted volume if
+you want dedup state to survive restarts — it self-recreates otherwise.
+
+**Works with threads?**
+Yes — `init()` installs both `sys.excepthook` and `threading.excepthook`.
+
+**Works with Celery / background workers?**
+Yes, `init()` in the worker process the same way as in a web process. For
+tasks you catch yourself, use `report()` or `@devalerts.capture()`.
+
+**Works on Windows / Linux / macOS?**
+Yes — stdlib only (`urllib`, `sqlite3`, `threading`), no OS-specific code
+paths.
+
+## Privacy & Security
+
+- The only network call devalerts makes is to `api.telegram.org` — no
+  telemetry, no analytics, nothing else phones home.
+- No third-party server and no devalerts-run backend — messages go straight
+  from your process to your own Telegram bot.
+- No accounts, no signup, no API key beyond the bot token you create and
+  control yourself.
+- Basic secret redaction only (a few common token/key patterns) — do not
+  rely on this for sensitive production data; scrub what you can before it
+  ever reaches an exception message.
+
 ## What this does NOT do (by design)
 
 - Grouping/rate limiting is local and in-process only (SQLite file, no
   server) — the dashboard is a CLI table, not a web UI.
 - No backend, no accounts — each user runs their own bot.
-- Basic secret redaction only (a few common token patterns) — do not rely
-  on this for sensitive production data.
+
+## Roadmap
+
+- Web dashboard (hosted, optional — the local CLI dashboard stays either way)
+- Slack delivery
+- Discord delivery
+- Email delivery
 
 ## Development
 
