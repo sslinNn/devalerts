@@ -14,8 +14,9 @@ def test_send_telegram_message_posts_expected_payload(monkeypatch):
 
     monkeypatch.setattr(_telegram.urllib.request, "urlopen", fake_urlopen)
 
-    _telegram._send_telegram_message("TOKEN", 12345, "hello")
+    ok = _telegram._send_telegram_message("TOKEN", 12345, "hello")
 
+    assert ok is True
     assert captured["url"] == "https://api.telegram.org/botTOKEN/sendMessage"
     assert captured["body"] == {"chat_id": 12345, "text": "hello"}
     assert captured["timeout"] == _telegram._TIMEOUT_SECONDS
@@ -27,6 +28,7 @@ def test_send_telegram_message_swallows_network_errors(monkeypatch, capsys):
 
     monkeypatch.setattr(_telegram.urllib.request, "urlopen", fake_urlopen)
 
-    _telegram._send_telegram_message("TOKEN", 12345, "hello")  # must not raise
+    ok = _telegram._send_telegram_message("TOKEN", 12345, "hello")  # must not raise
 
+    assert ok is False
     assert "failed to send Telegram alert" in capsys.readouterr().err

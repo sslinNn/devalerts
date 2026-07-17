@@ -51,7 +51,13 @@ devalerts.init(bot_token="123456:ABC-DEF...", chat_id=123456789)
 2. Один раз напишите своему боту (или добавьте его в группу), чтобы он мог писать вам в ответ.
 3. Узнайте свой chat id — напишите [@userinfobot](https://t.me/userinfobot), либо вызовите
    `https://api.telegram.org/bot<TOKEN>/getUpdates` после шага 2 и прочитайте `message.chat.id`.
-4. В своём приложении, как можно раньше:
+4. Проверьте, что всё настроено правильно, ещё до того как трогать код:
+
+   ```
+   uv run devalerts test --bot-token 123456:ABC-DEF... --chat-id 123456789
+   ```
+
+5. В своём приложении, как можно раньше:
 
 ```python
 import devalerts

@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+
+- `devalerts test --bot-token ... --chat-id ...` CLI command: sends a one-off
+  message so you can verify `bot_token`/`chat_id` are wired up correctly
+  before touching any code.
+- Test coverage for `ASGIMiddleware` (previously untested) and for
+  `_excepthook`/`_threading_excepthook`'s "must never raise" guarantee,
+  raising overall coverage from 86% to 95%.
+- GitHub repo topics for discoverability.
+
+### Changed
+
+- `_send_telegram_message` now returns `True`/`False` instead of `None`, so
+  callers (like the new `test` command) can tell whether delivery succeeded.
+
 ## [0.1.5] - 2026-07-18
 
 ### Added

@@ -1,4 +1,5 @@
-"""CLI: `devalerts dashboard` reports grouped/rate-limited errors from the local state DB."""
+"""CLI: `devalerts dashboard` reports grouped/rate-limited errors from the local
+state DB; `devalerts test` sends a one-off message to verify bot_token/chat_id."""
 
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import sys
 import time
 
 from ._store import _DB_PATH, _DEFAULT_RATE_LIMIT_SECONDS
+from ._telegram import _send_telegram_message
 
 _LOCATION_WIDTH = 34
 
@@ -141,14 +143,34 @@ def _dashboard() -> int:
     return 0
 
 
+def _test(bot_token: str, chat_id: str) -> int:
+    ok = _send_telegram_message(
+        bot_token,
+        chat_id,
+        "✅ devalerts test message -- bot_token and chat_id are wired up correctly.",
+    )
+    if not ok:
+        print("Failed to send test message (see error above).", file=sys.stderr)
+        return 1
+    print("Test message sent -- check your Telegram chat.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="devalerts")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("dashboard", help="Show grouped/rate-limited errors")
+    test_parser = subparsers.add_parser(
+        "test", help="Send a test message to verify bot_token/chat_id"
+    )
+    test_parser.add_argument("--bot-token", required=True)
+    test_parser.add_argument("--chat-id", required=True)
     args = parser.parse_args(argv)
 
     if args.command == "dashboard":
         return _dashboard()
+    if args.command == "test":
+        return _test(args.bot_token, args.chat_id)
     return 1
 
 

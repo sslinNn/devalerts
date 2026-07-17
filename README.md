@@ -50,7 +50,13 @@ chat instead of a log file nobody's watching.
 2. Message your bot once (or add it to a group) so it's allowed to message you back.
 3. Get your chat id — message [@userinfobot](https://t.me/userinfobot), or call
    `https://api.telegram.org/bot<TOKEN>/getUpdates` after step 2 and read `message.chat.id`.
-4. In your app, as early as possible:
+4. Verify it's wired up correctly before touching any code:
+
+   ```
+   uv run devalerts test --bot-token 123456:ABC-DEF... --chat-id 123456789
+   ```
+
+5. In your app, as early as possible:
 
 ```python
 import devalerts

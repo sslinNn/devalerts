@@ -10,7 +10,7 @@ import urllib.request
 _TIMEOUT_SECONDS = 5
 
 
-def _send_telegram_message(bot_token: str, chat_id: int | str, text: str) -> None:
+def _send_telegram_message(bot_token: str, chat_id: int | str, text: str) -> bool:
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
     request = urllib.request.Request(
@@ -23,3 +23,5 @@ def _send_telegram_message(bot_token: str, chat_id: int | str, text: str) -> Non
         urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS)
     except (urllib.error.URLError, OSError, ValueError) as error:
         print(f"devalerts: failed to send Telegram alert: {error}", file=sys.stderr)
+        return False
+    return True
