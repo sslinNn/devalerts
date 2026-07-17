@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import traceback
 
-__all__: list[str] = []
+__all__: list[str] = ["init"]
 
 _MAX_MESSAGE_LENGTH = 4096
 
@@ -65,3 +65,49 @@ def _send_telegram_message(bot_token: str, chat_id, text: str) -> None:
         urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS)
     except (urllib.error.URLError, OSError, ValueError) as error:
         print(f"devalerts: failed to send Telegram alert: {error}", file=sys.stderr)
+
+
+import threading
+
+_state = {
+    "bot_token": None,
+    "chat_id": None,
+    "redact": True,
+    "prev_excepthook": None,
+    "prev_threading_excepthook": None,
+}
+
+
+def _send_exception(exc_type, exc_value, tb) -> None:
+    message = _format_alert(exc_type, exc_value, tb)
+    if _state["redact"]:
+        message = _redact(message)
+    _send_telegram_message(_state["bot_token"], _state["chat_id"], message)
+
+
+def _excepthook(exc_type, exc_value, tb) -> None:
+    if exc_type is not KeyboardInterrupt:
+        try:
+            _send_exception(exc_type, exc_value, tb)
+        except Exception as error:  # noqa: BLE001 - crash handler must never raise
+            print(f"devalerts: internal error while sending alert: {error}", file=sys.stderr)
+    _state["prev_excepthook"](exc_type, exc_value, tb)
+
+
+def _threading_excepthook(args) -> None:
+    try:
+        _send_exception(args.exc_type, args.exc_value, args.exc_traceback)
+    except Exception as error:  # noqa: BLE001
+        print(f"devalerts: internal error while sending alert: {error}", file=sys.stderr)
+    _state["prev_threading_excepthook"](args)
+
+
+def init(bot_token: str, chat_id, *, redact: bool = True) -> None:
+    """Install a global exception hook that sends unhandled exceptions to Telegram."""
+    _state["bot_token"] = bot_token
+    _state["chat_id"] = chat_id
+    _state["redact"] = redact
+    _state["prev_excepthook"] = sys.excepthook
+    _state["prev_threading_excepthook"] = threading.excepthook
+    sys.excepthook = _excepthook
+    threading.excepthook = _threading_excepthook
