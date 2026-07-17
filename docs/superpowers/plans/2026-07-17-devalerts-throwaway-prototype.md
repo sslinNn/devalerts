@@ -13,7 +13,7 @@
 - Python ≥3.9 (broad compatibility with the target audience).
 - Zero runtime dependencies — stdlib only. Do not add `requests` or any HTTP client library.
 - All dependency/environment management goes through `uv` (`uv add`, `uv run`, `uv sync`), not raw `pip`/`venv`.
-- Build backend: `hatchling` (uv's default for library projects).
+- Build backend: `uv_build` (uv's own build backend; the installed uv 0.10.2 defaults `--lib` projects to it, not `hatchling` — confirmed during Task 1 review, human decision: keep `uv_build`, no third-party build dependency needed).
 - Package name: `devalerts`, importable as `import devalerts`.
 - Telegram hard message limit: 4096 characters — every outgoing message must be truncated to fit before sending.
 - The crash handler must never itself raise. Every internal failure (network error, formatting bug) is caught and logged to stderr, never propagated — a broken alert path must not break the user's program.
