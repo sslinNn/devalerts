@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import re
+import sys
+import threading
 import traceback
+import urllib.error
+import urllib.request
 
 __all__: list[str] = ["init", "report", "capture"]
 
@@ -44,11 +49,6 @@ def _redact(text: str) -> str:
     return text
 
 
-import json
-import sys
-import urllib.error
-import urllib.request
-
 _TIMEOUT_SECONDS = 5
 
 
@@ -66,8 +66,6 @@ def _send_telegram_message(bot_token: str, chat_id, text: str) -> None:
     except (urllib.error.URLError, OSError, ValueError) as error:
         print(f"devalerts: failed to send Telegram alert: {error}", file=sys.stderr)
 
-
-import threading
 
 _state = {
     "bot_token": None,
