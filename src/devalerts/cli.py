@@ -8,7 +8,7 @@ import sqlite3
 import sys
 import time
 
-from . import _DB_PATH, _DEFAULT_RATE_LIMIT_SECONDS
+from ._store import _DB_PATH, _DEFAULT_RATE_LIMIT_SECONDS
 
 _LOCATION_WIDTH = 34
 
