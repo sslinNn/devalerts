@@ -3,6 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/devalerts)](https://pypi.org/project/devalerts/)
 [![Python versions](https://img.shields.io/pypi/pyversions/devalerts)](https://pypi.org/project/devalerts/)
 [![License: MIT](https://img.shields.io/pypi/l/devalerts)](LICENSE)
+[![Tests](https://github.com/sslinNn/devalerts/actions/workflows/test.yml/badge.svg)](https://github.com/sslinNn/devalerts/actions/workflows/test.yml)
 
 [English version](README.md)
 
@@ -146,7 +147,17 @@ app.add_middleware(devalerts.ASGIMiddleware)
 - Нет бэкенда, нет аккаунтов — каждый пользователь запускает своего бота.
 - Только базовая редакция секретов (несколько частых паттернов токенов) — не
   полагайтесь на неё для чувствительных production-данных.
-- Нет автоматического набора тестов — проверено вручную только при реализации.
+
+## Разработка
+
+    uv sync --group dev
+    uv run pre-commit install
+
+`pre-commit` перед каждым коммитом гоняет `ruff check`, `ruff format` и
+`mypy`. Запустить полную проверку вручную:
+
+    uv run pytest
+    uv run pre-commit run --all-files
 
 ## Лицензия
 

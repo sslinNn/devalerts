@@ -3,6 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/devalerts)](https://pypi.org/project/devalerts/)
 [![Python versions](https://img.shields.io/pypi/pyversions/devalerts)](https://pypi.org/project/devalerts/)
 [![License: MIT](https://img.shields.io/pypi/l/devalerts)](LICENSE)
+[![Tests](https://github.com/sslinNn/devalerts/actions/workflows/test.yml/badge.svg)](https://github.com/sslinNn/devalerts/actions/workflows/test.yml)
 
 [Русская версия](README.ru.md)
 
@@ -145,7 +146,17 @@ service that doesn't have (and doesn't want) that infrastructure yet:
 - No backend, no accounts — each user runs their own bot.
 - Basic secret redaction only (a few common token patterns) — do not rely
   on this for sensitive production data.
-- No automated test suite — verified manually during implementation only.
+
+## Development
+
+    uv sync --group dev
+    uv run pre-commit install
+
+`pre-commit` runs `ruff check`, `ruff format`, and `mypy` before each commit.
+Run the full check manually with:
+
+    uv run pytest
+    uv run pre-commit run --all-files
 
 ## License
 
