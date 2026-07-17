@@ -1,9 +1,38 @@
 # devalerts
 
+[![PyPI](https://img.shields.io/pypi/v/devalerts)](https://pypi.org/project/devalerts/)
+[![Python versions](https://img.shields.io/pypi/pyversions/devalerts)](https://pypi.org/project/devalerts/)
+[![License: MIT](https://img.shields.io/pypi/l/devalerts)](LICENSE)
+
 [Русская версия](README.ru.md)
 
-Send unhandled Python exceptions straight to a Telegram chat. No backend,
-no account, no database — just your own bot token.
+Send unhandled Python exceptions straight to a Telegram chat — the moment
+they happen, on your phone. No backend, no account, no database — just your
+own bot token.
+
+```python
+import devalerts
+
+devalerts.init(bot_token="123456:ABC-DEF...", chat_id=123456789)
+```
+
+That's the whole setup. Two minutes with [@BotFather](https://t.me/BotFather)
+and every unhandled crash — including ones raised in threads — lands in your
+chat instead of a log file nobody's watching.
+
+## Why devalerts
+
+- **Zero infrastructure.** No SaaS signup, no ingestion server, no API key
+  to manage beyond your own Telegram bot token. State lives in a local
+  SQLite file you already own.
+- **One line to install, one line to wire up.** `init()` installs the hook
+  and gets out of the way.
+- **Not spam.** Errors are grouped by fingerprint and rate-limited per
+  group, so a crash loop sends one message, not a thousand.
+- **Framework-aware.** Ships an ASGI middleware for FastAPI/Starlette apps,
+  where the default excepthook would never even see a request error.
+- **Small and typed.** No dependencies, ships `py.typed`, ~450 lines total —
+  short enough to read in one sitting before you trust it with your errors.
 
 ## Install
 
@@ -47,6 +76,15 @@ See what's grouped and what's currently rate-limited:
 uv run devalerts dashboard
 ```
 
+```
+  ID        TYPE          LOCATION                            LAST SEEN TOTAL   STATUS
+  ────────────────────────────────────────────────────────────────────────────────────
+  a1b2c3d4  ValueError    app/orders.py:42                     2m ago       14   ● limited
+  9f8e7d6c  KeyError      app/handlers/webhook.py:88            just now      1   ● sending
+
+  2 error groups, 1 currently rate-limited.
+```
+
 ## Manually reporting a caught exception
 
 ```python
@@ -86,6 +124,20 @@ Only exceptions that actually escape as server errors get reported — routing
 404s and raised `HTTPException`s are already turned into responses by the
 framework before the middleware sees them.
 
+## devalerts vs. a full error tracker
+
+If you already run Sentry/Rollbar/etc., keep using it — this isn't a
+replacement. devalerts is for the side project, internal tool, or small
+service that doesn't have (and doesn't want) that infrastructure yet:
+
+|                          | devalerts          | Sentry-style tracker |
+|--------------------------|---------------------|-----------------------|
+| Setup                    | one bot token       | account + project + SDK config |
+| Backend                  | none — Telegram only | hosted or self-hosted service |
+| Where alerts land        | your Telegram chat  | a web dashboard |
+| Grouping / rate limiting | yes, local SQLite   | yes, server-side |
+| Search, trends, releases | no                  | yes |
+
 ## What this does NOT do (by design)
 
 - Grouping/rate limiting is local and in-process only (SQLite file, no
@@ -94,3 +146,7 @@ framework before the middleware sees them.
 - Basic secret redaction only (a few common token patterns) — do not rely
   on this for sensitive production data.
 - No automated test suite — verified manually during implementation only.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
