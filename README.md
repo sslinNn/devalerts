@@ -28,6 +28,25 @@ devalerts.init(bot_token="123456:ABC-DEF...", chat_id=123456789)
 That's it — any unhandled exception (including ones raised in threads) now
 also lands in your Telegram chat.
 
+## Grouping, rate limiting, and the dashboard
+
+Exceptions are grouped by fingerprint (exception type + file + line where it
+was raised) in a local SQLite file (`~/.devalerts/state.db`). Each group
+sends at most one Telegram message per `rate_limit_seconds` (default 300);
+repeats inside that window are counted but not sent, and the next message
+for that group says how many were skipped. Old groups (untouched for 7 days)
+are pruned automatically. Configure the window via `init()`:
+
+```python
+devalerts.init(bot_token="...", chat_id=123456789, rate_limit_seconds=60)
+```
+
+See what's grouped and what's currently rate-limited:
+
+```
+uv run devalerts dashboard
+```
+
 ## Manually reporting a caught exception
 
 ```python
@@ -69,8 +88,8 @@ framework before the middleware sees them.
 
 ## What this does NOT do (by design — it's a throwaway prototype)
 
-- No dashboard, no grouping/deduplication, no rate limiting — every
-  unhandled exception sends a message.
+- Grouping/rate limiting is local and in-process only (SQLite file, no
+  server) — the dashboard is a CLI table, not a web UI.
 - No backend, no accounts — each user runs their own bot.
 - Basic secret redaction only (a few common token patterns) — do not rely
   on this for sensitive production data.
