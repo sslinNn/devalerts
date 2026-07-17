@@ -29,5 +29,14 @@ jobs:
       - name: Build package
         run: uv build
 
+      - name: Smoke-test the built wheel
+        run: |
+          uv run --with "$(ls dist/*.whl)" --no-project -- devalerts --version
+          uv run --with "$(ls dist/*.whl)" --no-project -- python -c "
+          import devalerts, pathlib
+          p = pathlib.Path(devalerts.__file__).parent / 'py.typed'
+          assert p.exists(), f'{p} missing from built wheel'
+          "
+
       - name: Publish to PyPI
         run: uv publish
