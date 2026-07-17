@@ -52,7 +52,7 @@ def _threading_excepthook(args) -> None:
 
 def init(
     bot_token: str,
-    chat_id,
+    chat_id: int | str,
     *,
     redact: bool = True,
     rate_limit_seconds: int = _DEFAULT_RATE_LIMIT_SECONDS,

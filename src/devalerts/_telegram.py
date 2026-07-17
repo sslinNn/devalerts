@@ -10,7 +10,7 @@ import urllib.request
 _TIMEOUT_SECONDS = 5
 
 
-def _send_telegram_message(bot_token: str, chat_id, text: str) -> None:
+def _send_telegram_message(bot_token: str, chat_id: int | str, text: str) -> None:
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
     request = urllib.request.Request(
