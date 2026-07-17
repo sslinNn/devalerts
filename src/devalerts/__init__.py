@@ -107,7 +107,12 @@ def init(bot_token: str, chat_id, *, redact: bool = True) -> None:
     _state["bot_token"] = bot_token
     _state["chat_id"] = chat_id
     _state["redact"] = redact
-    _state["prev_excepthook"] = sys.excepthook
-    _state["prev_threading_excepthook"] = threading.excepthook
+    # ponytail: guard against calling init() twice capturing our own hook as
+    # "previous" -- that would make _excepthook chain to itself and recurse
+    # forever on the next crash, violating "must never raise".
+    if sys.excepthook is not _excepthook:
+        _state["prev_excepthook"] = sys.excepthook
+    if threading.excepthook is not _threading_excepthook:
+        _state["prev_threading_excepthook"] = threading.excepthook
     sys.excepthook = _excepthook
     threading.excepthook = _threading_excepthook
