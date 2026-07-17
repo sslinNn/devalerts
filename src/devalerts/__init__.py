@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import sys
@@ -10,7 +11,7 @@ import traceback
 import urllib.error
 import urllib.request
 
-__all__: list[str] = ["init", "report", "capture"]
+__all__: list[str] = ["init", "report", "capture", "ASGIMiddleware"]
 
 _MAX_MESSAGE_LENGTH = 4096
 
@@ -127,8 +128,10 @@ def report(exc: BaseException | None = None) -> None:
     _send_exception(exc_type, exc_value, tb)
 
 
-class capture:
-    """Context manager: report any exception raised inside the block, then re-raise it."""
+class capture(contextlib.ContextDecorator):
+    """Context manager / decorator: report any exception raised inside the block or
+    function, then re-raise it. Use ``@capture()`` on a function instead of wrapping
+    its body in a manual ``try/except`` or ``with`` block."""
 
     def __enter__(self) -> "capture":
         return self
@@ -137,3 +140,34 @@ class capture:
         if exc_type is not None:
             _send_exception(exc_type, exc_value, tb)
         return False
+
+
+class ASGIMiddleware:
+    """ASGI middleware for FastAPI/Starlette (or any ASGI app): report any exception
+    that escapes a request, then re-raise it so the framework's own error handling
+    still runs unchanged.
+
+    Usage::
+
+        app.add_middleware(devalerts.ASGIMiddleware)
+
+    Only exceptions that actually reach here (unhandled server errors) get reported —
+    routing 404s and raised ``HTTPException``s are already turned into responses by
+    the framework before this middleware sees them, same as Sentry's ASGI integration.
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await self.app(scope, receive, send)
+        except Exception:
+            exc_type, exc_value, tb = sys.exc_info()
+            # ponytail: fire-and-forget in a thread -- _send_exception is a
+            # blocking network call; awaiting it here would stall the event
+            # loop (and the error response) for up to _TIMEOUT_SECONDS.
+            threading.Thread(
+                target=_send_exception, args=(exc_type, exc_value, tb), daemon=True
+            ).start()
+            raise

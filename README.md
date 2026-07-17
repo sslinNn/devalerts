@@ -1,5 +1,7 @@
 # devalerts (throwaway prototype)
 
+[Русская версия](README.ru.md)
+
 Send unhandled Python exceptions straight to a Telegram chat. No backend,
 no account, no database — just your own bot token.
 
@@ -41,6 +43,29 @@ or:
 with devalerts.capture():
     risky_call()  # reports on exception, then re-raises
 ```
+
+`capture` also works as a decorator, so you don't need to touch a function's
+body at all:
+
+```python
+@devalerts.capture()
+def risky_call():
+    ...
+```
+
+## FastAPI / Starlette / any ASGI app
+
+`init()`'s excepthook won't see request errors — the framework already catches
+them internally to return a 500 response, so nothing "unhandled" ever reaches
+the process. Use the ASGI middleware instead:
+
+```python
+app.add_middleware(devalerts.ASGIMiddleware)
+```
+
+Only exceptions that actually escape as server errors get reported — routing
+404s and raised `HTTPException`s are already turned into responses by the
+framework before the middleware sees them.
 
 ## What this does NOT do (by design — it's a throwaway prototype)
 
