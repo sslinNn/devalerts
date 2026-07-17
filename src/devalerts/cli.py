@@ -8,6 +8,7 @@ import os
 import sqlite3
 import sys
 import time
+from importlib.metadata import version as _pkg_version
 
 from ._store import _DB_PATH, _DEFAULT_RATE_LIMIT_SECONDS
 from ._telegram import _send_telegram_message
@@ -158,6 +159,9 @@ def _test(bot_token: str, chat_id: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="devalerts")
+    parser.add_argument(
+        "--version", action="version", version=f"devalerts {_pkg_version('devalerts')}"
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("dashboard", help="Show grouped/rate-limited errors")
     test_parser = subparsers.add_parser(

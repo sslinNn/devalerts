@@ -93,3 +93,11 @@ def test_test_command_failure(monkeypatch, capsys):
 
     assert exit_code == 1
     assert "Failed to send test message" in capsys.readouterr().err
+
+
+def test_version_flag_prints_installed_version(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--version"])
+
+    assert exc_info.value.code == 0
+    assert "devalerts" in capsys.readouterr().out
