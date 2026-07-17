@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import traceback
 
-__all__: list[str] = ["init"]
+__all__: list[str] = ["init", "report", "capture"]
 
 _MAX_MESSAGE_LENGTH = 4096
 
@@ -116,3 +116,26 @@ def init(bot_token: str, chat_id, *, redact: bool = True) -> None:
         _state["prev_threading_excepthook"] = threading.excepthook
     sys.excepthook = _excepthook
     threading.excepthook = _threading_excepthook
+
+
+def report(exc: BaseException | None = None) -> None:
+    """Manually send a caught exception to Telegram."""
+    if exc is None:
+        exc_type, exc_value, tb = sys.exc_info()
+        if exc_type is None:
+            raise RuntimeError("report() requires an active exception or an exc argument")
+    else:
+        exc_type, exc_value, tb = type(exc), exc, exc.__traceback__
+    _send_exception(exc_type, exc_value, tb)
+
+
+class capture:
+    """Context manager: report any exception raised inside the block, then re-raise it."""
+
+    def __enter__(self) -> "capture":
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb) -> bool:
+        if exc_type is not None:
+            _send_exception(exc_type, exc_value, tb)
+        return False
