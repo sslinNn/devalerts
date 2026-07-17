@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## [0.1.5] - 2026-07-18
 
 ### Added
 
@@ -13,10 +13,23 @@ All notable changes to this project are documented here.
   it passing.
 - `ruff` (lint + format) and `mypy` (type checking), enforced in CI and via
   `pre-commit`.
+- `CONTRIBUTING.md` and `SECURITY.md`.
+- README: a real dashboard screenshot (generated from actual CLI output),
+  FAQ, Privacy & Security, and Roadmap sections; Ruff/mypy/Downloads badges.
+
+### Changed
+
 - Internal module state (`_state`) is now a typed `TypedDict` instead of a
   plain dict, and `report()`/`capture()`/the ASGI middleware now print a
   clear "init() was not called" message instead of silently attempting a
   malformed Telegram request when used before `init()`.
+- "devalerts vs. a full error tracker" reframed as "Why not Sentry?".
+
+### Fixed
+
+- Tests badge now uses img.shields.io instead of the raw GitHub Actions
+  badge URL, which didn't render reliably (notably on PyPI's own README
+  rendering, unlike the other shields.io badges).
 
 ## [0.1.4] - 2026-07-17
 
