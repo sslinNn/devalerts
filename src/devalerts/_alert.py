@@ -9,7 +9,7 @@ _MAX_MESSAGE_LENGTH = 4096
 
 
 def _format_alert(exc_type, exc_value, tb, skipped: int = 0) -> str:
-    header = f"\U0001F534 {exc_type.__name__}: {exc_value}"
+    header = f"\U0001f534 {exc_type.__name__}: {exc_value}"
     if skipped:
         header += f"\n⚠️ Повторилась ещё {skipped} раз(а) с последнего алерта"
     body = "".join(traceback.format_exception(exc_type, exc_value, tb))

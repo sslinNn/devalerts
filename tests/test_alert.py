@@ -49,7 +49,10 @@ def test_redact_aws_key():
 
 
 def test_redact_bearer_token():
-    assert _redact("Authorization: Bearer abc123.def-456_ghi") == "Authorization: Bearer [REDACTED]"
+    assert (
+        _redact("Authorization: Bearer abc123.def-456_ghi")
+        == "Authorization: Bearer [REDACTED]"
+    )
 
 
 def test_redact_generic_secret_patterns():

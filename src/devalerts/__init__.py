@@ -5,6 +5,8 @@ from __future__ import annotations
 import contextlib
 import sys
 import threading
+from types import TracebackType
+from typing import Callable, Literal, Optional, TypedDict
 
 from ._alert import _format_alert, _redact
 from ._store import _DEFAULT_RATE_LIMIT_SECONDS, _fingerprint, _should_send
@@ -12,19 +14,43 @@ from ._telegram import _send_telegram_message
 
 __all__: list[str] = ["init", "report", "capture", "ASGIMiddleware"]
 
-_state = {
+_ExceptHook = Callable[
+    [type[BaseException], BaseException, Optional[TracebackType]], object
+]
+_ThreadingExceptHook = Callable[[threading.ExceptHookArgs], object]
+
+
+class _State(TypedDict):
+    bot_token: str | None
+    chat_id: int | str | None
+    redact: bool
+    rate_limit_seconds: int
+    # Seeded with the real default hooks below (never None) -- _excepthook/
+    # _threading_excepthook can only ever fire after init() has replaced
+    # sys.excepthook/threading.excepthook, by which point these are always
+    # set, so keeping them non-Optional avoids an unreachable None check.
+    prev_excepthook: _ExceptHook
+    prev_threading_excepthook: _ThreadingExceptHook
+
+
+_state: _State = {
     "bot_token": None,
     "chat_id": None,
     "redact": True,
     "rate_limit_seconds": _DEFAULT_RATE_LIMIT_SECONDS,
-    "prev_excepthook": None,
-    "prev_threading_excepthook": None,
+    "prev_excepthook": sys.excepthook,
+    "prev_threading_excepthook": threading.excepthook,
 }
 
 
 def _send_exception(exc_type, exc_value, tb) -> None:
+    if _state["bot_token"] is None or _state["chat_id"] is None:
+        print("devalerts: init() was not called, dropping alert", file=sys.stderr)
+        return
     fingerprint, location = _fingerprint(exc_type, tb)
-    send, skipped = _should_send(fingerprint, exc_type.__name__, location, _state["rate_limit_seconds"])
+    send, skipped = _should_send(
+        fingerprint, exc_type.__name__, location, _state["rate_limit_seconds"]
+    )
     if not send:
         return
     message = _format_alert(exc_type, exc_value, tb, skipped=skipped)
@@ -38,7 +64,10 @@ def _excepthook(exc_type, exc_value, tb) -> None:
         try:
             _send_exception(exc_type, exc_value, tb)
         except Exception as error:  # noqa: BLE001 - crash handler must never raise
-            print(f"devalerts: internal error while sending alert: {error}", file=sys.stderr)
+            print(
+                f"devalerts: internal error while sending alert: {error}",
+                file=sys.stderr,
+            )
     _state["prev_excepthook"](exc_type, exc_value, tb)
 
 
@@ -46,7 +75,9 @@ def _threading_excepthook(args) -> None:
     try:
         _send_exception(args.exc_type, args.exc_value, args.exc_traceback)
     except Exception as error:  # noqa: BLE001
-        print(f"devalerts: internal error while sending alert: {error}", file=sys.stderr)
+        print(
+            f"devalerts: internal error while sending alert: {error}", file=sys.stderr
+        )
     _state["prev_threading_excepthook"](args)
 
 
@@ -78,7 +109,9 @@ def report(exc: BaseException | None = None) -> None:
     if exc is None:
         exc_type, exc_value, tb = sys.exc_info()
         if exc_type is None:
-            raise RuntimeError("report() requires an active exception or an exc argument")
+            raise RuntimeError(
+                "report() requires an active exception or an exc argument"
+            )
     else:
         exc_type, exc_value, tb = type(exc), exc, exc.__traceback__
     _send_exception(exc_type, exc_value, tb)
@@ -92,7 +125,7 @@ class capture(contextlib.ContextDecorator):
     def __enter__(self) -> "capture":
         return self
 
-    def __exit__(self, exc_type, exc_value, tb) -> bool:
+    def __exit__(self, exc_type, exc_value, tb) -> Literal[False]:
         if exc_type is not None:
             _send_exception(exc_type, exc_value, tb)
         return False

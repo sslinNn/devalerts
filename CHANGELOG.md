@@ -11,6 +11,12 @@ All notable changes to this project are documented here.
   `ASGIMiddleware`), and the CLI dashboard.
 - CI workflow that runs the test suite on push/PR and gates PyPI publishing on
   it passing.
+- `ruff` (lint + format) and `mypy` (type checking), enforced in CI and via
+  `pre-commit`.
+- Internal module state (`_state`) is now a typed `TypedDict` instead of a
+  plain dict, and `report()`/`capture()`/the ASGI middleware now print a
+  clear "init() was not called" message instead of silently attempting a
+  malformed Telegram request when used before `init()`.
 
 ## [0.1.4] - 2026-07-17
 

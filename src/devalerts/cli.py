@@ -118,7 +118,9 @@ def _dashboard() -> int:
         # doesn't know the app's actual rate_limit_seconds -- uses the
         # library default. Upgrade to persisting the configured value if
         # apps commonly override it.
-        in_window = last_sent is not None and now - last_sent < _DEFAULT_RATE_LIMIT_SECONDS
+        in_window = (
+            last_sent is not None and now - last_sent < _DEFAULT_RATE_LIMIT_SECONDS
+        )
         if in_window:
             limited_count += 1
             status = style.red(f"{dot_char} limited")

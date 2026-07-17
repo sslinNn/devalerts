@@ -42,7 +42,9 @@ def _get_connection() -> sqlite3.Connection:
     return conn
 
 
-def _should_send(fingerprint: str, exc_type_name: str, location: str, rate_limit_seconds: int) -> tuple[bool, int]:
+def _should_send(
+    fingerprint: str, exc_type_name: str, location: str, rate_limit_seconds: int
+) -> tuple[bool, int]:
     now = time.time()
     try:
         conn = _get_connection()
@@ -79,12 +81,18 @@ def _should_send(fingerprint: str, exc_type_name: str, location: str, rate_limit
                         """,
                         (now, fingerprint),
                     )
-                conn.execute("DELETE FROM error_groups WHERE last_seen < ?", (now - _RETENTION_SECONDS,))
+                conn.execute(
+                    "DELETE FROM error_groups WHERE last_seen < ?",
+                    (now - _RETENTION_SECONDS,),
+                )
             return send, skipped
         finally:
             conn.close()
     except (sqlite3.Error, OSError) as error:
         # ponytail: dedup/rate-limit state must never block an alert -- fail
         # open (send, as if this were the first occurrence) on any DB error.
-        print(f"devalerts: dedup/rate-limit state error, sending anyway: {error}", file=sys.stderr)
+        print(
+            f"devalerts: dedup/rate-limit state error, sending anyway: {error}",
+            file=sys.stderr,
+        )
         return True, 0
