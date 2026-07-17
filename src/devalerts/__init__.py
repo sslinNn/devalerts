@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import traceback
 
 __all__: list[str] = []
@@ -22,3 +23,22 @@ def _format_alert(exc_type, exc_value, tb) -> str:
     keep = max(_MAX_MESSAGE_LENGTH - len(header) - len(marker), 0)
     truncated = f"{header}{marker}{body[-keep:]}" if keep else header
     return truncated[:_MAX_MESSAGE_LENGTH]
+
+
+# ponytail: fixed pattern list, not exhaustive — catches common
+# token/key shapes only. Upgrade to entropy-based detection if
+# real users report leaked secrets slipping through.
+_REDACT_PATTERNS = [
+    (re.compile(r"AKIA[0-9A-Z]{16}"), "[REDACTED]"),
+    (re.compile(r"Bearer\s+[A-Za-z0-9\-_.]+", re.IGNORECASE), "Bearer [REDACTED]"),
+    (
+        re.compile(r"(?i)(api[_-]?key|secret|token|password)\s*[=:]\s*\S+"),
+        r"\1=[REDACTED]",
+    ),
+]
+
+
+def _redact(text: str) -> str:
+    for pattern, replacement in _REDACT_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
