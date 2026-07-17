@@ -5,9 +5,9 @@
 
 ## Установка
 
-    uv add git+https://github.com/<you>/<repo>.git
+    uv add devalerts
 
-(или `pip install git+https://github.com/<you>/<repo>.git`, если не используете uv)
+(или `pip install devalerts`, если не используете uv)
 
 ## Использование
 

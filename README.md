@@ -7,9 +7,9 @@ no account, no database — just your own bot token.
 
 ## Install
 
-    uv add git+https://github.com/<you>/<repo>.git
+    uv add devalerts
 
-(or `pip install git+https://github.com/<you>/<repo>.git` if you're not using uv)
+(or `pip install devalerts` if you're not using uv)
 
 ## Usage
 
