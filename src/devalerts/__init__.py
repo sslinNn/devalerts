@@ -1,4 +1,4 @@
-"""Throwaway prototype: send unhandled Python exceptions straight to a Telegram chat."""
+"""Send unhandled Python exceptions straight to a Telegram chat."""
 
 from __future__ import annotations
 
