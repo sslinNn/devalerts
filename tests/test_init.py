@@ -91,6 +91,41 @@ def test_report_drops_alert_when_init_never_called(isolated, monkeypatch, capsys
     assert "init() was not called" in capsys.readouterr().err
 
 
+def test_report_passes_extra_tags_into_message(isolated):
+    devalerts.report(ValueError("with extra"), extra={"request_id": "abc"})
+    assert "request_id=abc" in isolated[0]
+
+
+def test_capture_passes_extra_tags_into_message(isolated):
+    with pytest.raises(ValueError):
+        with devalerts.capture(extra={"job": "nightly"}):
+            raise ValueError("in context")
+    assert "job=nightly" in isolated[0]
+
+
+def test_init_tags_included_in_every_alert(isolated, monkeypatch):
+    monkeypatch.setitem(devalerts._state, "tags", {"env": "production"})
+    devalerts.report(ValueError("boom"))
+    assert "env=production" in isolated[0]
+
+
+def test_report_extra_overrides_init_tags_on_key_collision(isolated, monkeypatch):
+    monkeypatch.setitem(devalerts._state, "tags", {"env": "production"})
+    devalerts.report(ValueError("boom"), extra={"env": "staging"})
+    assert "env=staging" in isolated[0]
+    assert "env=production" not in isolated[0]
+
+
+def test_init_stores_tags():
+    devalerts.init("token", 1, tags={"env": "production"})
+    assert devalerts._state["tags"] == {"env": "production"}
+
+
+def test_init_defaults_tags_to_empty_dict():
+    devalerts.init("token", 1)
+    assert devalerts._state["tags"] == {}
+
+
 def test_init_twice_does_not_chain_to_own_excepthook():
     original_hook = sys.excepthook
     devalerts.init("token", 1)

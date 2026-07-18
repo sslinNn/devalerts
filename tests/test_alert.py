@@ -1,3 +1,5 @@
+import socket
+
 from devalerts import _alert
 from devalerts._alert import _MAX_MESSAGE_LENGTH, _format_alert, _redact
 
@@ -64,3 +66,21 @@ def test_redact_generic_secret_patterns():
 def test_redact_leaves_normal_text_untouched():
     text = "user visited /checkout with total=42"
     assert _redact(text) == text
+
+
+def test_format_alert_includes_hostname_by_default():
+    exc_type, exc_value, tb = _make_tb()
+    message = _format_alert(exc_type, exc_value, tb)
+    assert socket.gethostname() in message
+
+
+def test_format_alert_includes_tags():
+    exc_type, exc_value, tb = _make_tb()
+    message = _format_alert(exc_type, exc_value, tb, tags={"env": "production"})
+    assert "env=production" in message
+
+
+def test_format_alert_no_tags_parens_when_no_tags():
+    exc_type, exc_value, tb = _make_tb()
+    message = _format_alert(exc_type, exc_value, tb)
+    assert "(" not in message.splitlines()[1]

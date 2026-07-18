@@ -6,6 +6,16 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- Every alert now includes the sending host (`socket.gethostname()`) — useful
+  when one bot serves multiple processes/servers. `init(tags={...})` adds
+  global tags to every alert; `report(extra={...})` / `capture(extra={...})`
+  add ad-hoc tags to a single call, overriding `init()`'s tags on key
+  collision.
+- Chronic error groups (occurrences piling up while rate-limited) now back
+  off exponentially: each chronic resend doubles the effective
+  `rate_limit_seconds` for that group, capped at 8x. A group that goes quiet
+  and reappears once (no pile-up) resets to the base rate immediately.
+  `dashboard`/`--json` show the active multiplier.
 - `devalerts mute <fingerprint>` / `devalerts unmute <fingerprint>`: silence
   or re-enable alerts for a specific error group without touching code.
   Unmuting resends with the accumulated skip count, same as a rate-limit
@@ -32,6 +42,9 @@ All notable changes to this project are documented here.
 
 - `_send_telegram_message` now returns `True`/`False` instead of `None`, so
   callers (like the new `test` command) can tell whether delivery succeeded.
+- Telegram delivery now retries once on failure (honoring `Retry-After` on a
+  429, up to 10s) before giving up. If every attempt fails, the message is
+  appended to `~/.devalerts/failed.log` instead of just being dropped.
 
 ## [0.1.5] - 2026-07-18
 

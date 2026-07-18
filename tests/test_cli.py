@@ -135,6 +135,7 @@ def test_dashboard_json_output(capsys):
             "count_since_last_sent": 0,
             "rate_limited": True,
             "muted": False,
+            "backoff_multiplier": 1,
         }
     ]
 
@@ -200,6 +201,31 @@ def test_clear_all_removes_every_group(capsys):
     assert cli.main(["clear", "--all"]) == 0
     assert "Cleared all error groups." in capsys.readouterr().out
     assert _store._match_fingerprints("fp") == []
+
+
+def test_dashboard_shows_backoff_multiplier(capsys):
+    conn = sqlite3.connect(cli._DB_PATH)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS error_groups (
+            fingerprint TEXT PRIMARY KEY, exc_type TEXT NOT NULL, location TEXT NOT NULL,
+            first_seen REAL NOT NULL, last_seen REAL NOT NULL, last_sent REAL,
+            count_since_last_sent INTEGER NOT NULL DEFAULT 0,
+            total_count INTEGER NOT NULL DEFAULT 0, rate_limit_seconds INTEGER,
+            muted INTEGER NOT NULL DEFAULT 0, backoff_multiplier INTEGER NOT NULL DEFAULT 1
+        )
+        """
+    )
+    now = time.time()
+    conn.execute(
+        "INSERT INTO error_groups VALUES ('fp', 'ValueError', 'app.py:1', ?, ?, ?, 0, 1, 100, 0, 4)",
+        (now, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    assert cli._dashboard() == 0
+    assert "×4" in capsys.readouterr().out
 
 
 def test_clear_unknown_fingerprint_fails(capsys):

@@ -1,4 +1,5 @@
 import sqlite3
+import time
 
 import pytest
 
@@ -117,6 +118,101 @@ def test_clear_all_removes_every_group():
     _store._should_send("fp13", "ValueError", "app.py:1", 300)
     _store._clear_all()
     assert _store._match_fingerprints("fp") == []
+
+
+def test_backoff_multiplier_doubles_on_chronic_resend():
+    conn = _store._get_connection()
+    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (True, 0)
+    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (False, 0)
+    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (False, 0)
+    conn.execute(
+        "UPDATE error_groups SET last_sent = ? WHERE fingerprint = ?",
+        (time.time() - 150, "fpB"),
+    )
+    conn.commit()
+
+    # Two occurrences piled up while suppressed -- chronic, multiplier doubles.
+    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (True, 2)
+    row = conn.execute(
+        "SELECT backoff_multiplier FROM error_groups WHERE fingerprint = ?", ("fpB",)
+    ).fetchone()
+    assert row[0] == 2
+    conn.close()
+
+
+def test_backoff_multiplier_extends_effective_window():
+    conn = _store._get_connection()
+    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (True, 0)
+    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (False, 0)
+    conn.execute(
+        "UPDATE error_groups SET last_sent = ? WHERE fingerprint = ?",
+        (time.time() - 150, "fpC"),
+    )
+    conn.commit()
+    # Chronic resend: multiplier becomes 2, effective window now 200s.
+    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (True, 1)
+
+    # 150s later would have passed the *base* 100s window but not the doubled 200s one.
+    conn.execute(
+        "UPDATE error_groups SET last_sent = ? WHERE fingerprint = ?",
+        (time.time() - 150, "fpC"),
+    )
+    conn.commit()
+    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (False, 0)
+    conn.close()
+
+
+def test_backoff_multiplier_resets_after_quiet_spell():
+    conn = _store._get_connection()
+    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (True, 0)
+    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (False, 0)
+    conn.execute(
+        "UPDATE error_groups SET last_sent = ? WHERE fingerprint = ?",
+        (time.time() - 150, "fpD"),
+    )
+    conn.commit()
+    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (True, 1)
+    row = conn.execute(
+        "SELECT backoff_multiplier FROM error_groups WHERE fingerprint = ?", ("fpD",)
+    ).fetchone()
+    assert row[0] == 2
+
+    # Long quiet spell, then a single fresh occurrence -- no pile-up this time.
+    conn.execute(
+        "UPDATE error_groups SET last_sent = ? WHERE fingerprint = ?",
+        (time.time() - 1000, "fpD"),
+    )
+    conn.commit()
+    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (True, 0)
+    row = conn.execute(
+        "SELECT backoff_multiplier FROM error_groups WHERE fingerprint = ?", ("fpD",)
+    ).fetchone()
+    assert row[0] == 1
+    conn.close()
+
+
+def test_backoff_multiplier_caps_at_max():
+    conn = _store._get_connection()
+    now = time.time()
+    conn.execute(
+        """
+        INSERT INTO error_groups
+            (fingerprint, exc_type, location, first_seen, last_seen, last_sent,
+             count_since_last_sent, total_count, rate_limit_seconds, backoff_multiplier)
+        VALUES ('fpE', 'ValueError', 'app.py:1', ?, ?, ?, 1, 2, 1, 4)
+        """,
+        (now, now, now - 1000),
+    )
+    conn.commit()
+    conn.close()
+
+    assert _store._should_send("fpE", "ValueError", "app.py:1", 1) == (True, 1)
+    conn = _store._get_connection()
+    row = conn.execute(
+        "SELECT backoff_multiplier FROM error_groups WHERE fingerprint = ?", ("fpE",)
+    ).fetchone()
+    assert row[0] == _store._MAX_BACKOFF_MULTIPLIER  # min(4*2, 8) == 8
+    conn.close()
 
 
 def test_migration_adds_columns_to_pre_existing_db():

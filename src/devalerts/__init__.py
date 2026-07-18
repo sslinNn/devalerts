@@ -25,6 +25,7 @@ class _State(TypedDict):
     chat_id: int | str | None
     redact: bool
     rate_limit_seconds: int
+    tags: dict[str, str]
     # Seeded with the real default hooks below (never None) -- _excepthook/
     # _threading_excepthook can only ever fire after init() has replaced
     # sys.excepthook/threading.excepthook, by which point these are always
@@ -38,12 +39,15 @@ _state: _State = {
     "chat_id": None,
     "redact": True,
     "rate_limit_seconds": _DEFAULT_RATE_LIMIT_SECONDS,
+    "tags": {},
     "prev_excepthook": sys.excepthook,
     "prev_threading_excepthook": threading.excepthook,
 }
 
 
-def _send_exception(exc_type, exc_value, tb) -> None:
+def _send_exception(
+    exc_type, exc_value, tb, extra: dict[str, str] | None = None
+) -> None:
     if _state["bot_token"] is None or _state["chat_id"] is None:
         print("devalerts: init() was not called, dropping alert", file=sys.stderr)
         return
@@ -53,7 +57,8 @@ def _send_exception(exc_type, exc_value, tb) -> None:
     )
     if not send:
         return
-    message = _format_alert(exc_type, exc_value, tb, skipped=skipped)
+    tags = {**_state["tags"], **(extra or {})}
+    message = _format_alert(exc_type, exc_value, tb, skipped=skipped, tags=tags)
     if _state["redact"]:
         message = _redact(message)
     _send_telegram_message(_state["bot_token"], _state["chat_id"], message)
@@ -87,12 +92,14 @@ def init(
     *,
     redact: bool = True,
     rate_limit_seconds: int = _DEFAULT_RATE_LIMIT_SECONDS,
+    tags: dict[str, str] | None = None,
 ) -> None:
     """Install a global exception hook that sends unhandled exceptions to Telegram."""
     _state["bot_token"] = bot_token
     _state["chat_id"] = chat_id
     _state["redact"] = redact
     _state["rate_limit_seconds"] = rate_limit_seconds
+    _state["tags"] = tags or {}
     # ponytail: guard against calling init() twice capturing our own hook as
     # "previous" -- that would make _excepthook chain to itself and recurse
     # forever on the next crash, violating "must never raise".
@@ -104,7 +111,9 @@ def init(
     threading.excepthook = _threading_excepthook
 
 
-def report(exc: BaseException | None = None) -> None:
+def report(
+    exc: BaseException | None = None, *, extra: dict[str, str] | None = None
+) -> None:
     """Manually send a caught exception to Telegram."""
     if exc is None:
         exc_type, exc_value, tb = sys.exc_info()
@@ -114,7 +123,7 @@ def report(exc: BaseException | None = None) -> None:
             )
     else:
         exc_type, exc_value, tb = type(exc), exc, exc.__traceback__
-    _send_exception(exc_type, exc_value, tb)
+    _send_exception(exc_type, exc_value, tb, extra=extra)
 
 
 class capture(contextlib.ContextDecorator):
@@ -122,12 +131,15 @@ class capture(contextlib.ContextDecorator):
     function, then re-raise it. Use ``@capture()`` on a function instead of wrapping
     its body in a manual ``try/except`` or ``with`` block."""
 
+    def __init__(self, *, extra: dict[str, str] | None = None) -> None:
+        self._extra = extra
+
     def __enter__(self) -> "capture":
         return self
 
     def __exit__(self, exc_type, exc_value, tb) -> Literal[False]:
         if exc_type is not None:
-            _send_exception(exc_type, exc_value, tb)
+            _send_exception(exc_type, exc_value, tb, extra=self._extra)
         return False
 
 

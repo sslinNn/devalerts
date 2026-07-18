@@ -12,6 +12,9 @@ from pathlib import Path
 _DB_PATH = Path.home() / ".devalerts" / "state.db"
 _RETENTION_SECONDS = 7 * 24 * 3600
 _DEFAULT_RATE_LIMIT_SECONDS = 300
+# ponytail: fixed cap, not configurable -- upgrade to an init() param if
+# users report the ceiling being wrong for their crash-loop cadence.
+_MAX_BACKOFF_MULTIPLIER = 8
 
 
 def _fingerprint(exc_type, tb) -> tuple[str, str]:
@@ -37,16 +40,18 @@ def _get_connection() -> sqlite3.Connection:
             count_since_last_sent INTEGER NOT NULL DEFAULT 0,
             total_count INTEGER NOT NULL DEFAULT 0,
             rate_limit_seconds INTEGER,
-            muted INTEGER NOT NULL DEFAULT 0
+            muted INTEGER NOT NULL DEFAULT 0,
+            backoff_multiplier INTEGER NOT NULL DEFAULT 1
         )
         """
     )
-    # ponytail: lazy migration for DBs created before rate_limit_seconds/muted
-    # existed -- ADD COLUMN has no "IF NOT EXISTS", so swallow the duplicate-
-    # column error on every subsequent call instead of tracking schema version.
+    # ponytail: lazy migration for DBs created before these columns existed --
+    # ADD COLUMN has no "IF NOT EXISTS", so swallow the duplicate-column error
+    # on every subsequent call instead of tracking schema version.
     for ddl in (
         "ALTER TABLE error_groups ADD COLUMN rate_limit_seconds INTEGER",
         "ALTER TABLE error_groups ADD COLUMN muted INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE error_groups ADD COLUMN backoff_multiplier INTEGER NOT NULL DEFAULT 1",
     ):
         try:
             conn.execute(ddl)
@@ -64,26 +69,37 @@ def _should_send(
         try:
             with conn:
                 row = conn.execute(
-                    "SELECT last_sent, count_since_last_sent, muted FROM error_groups WHERE fingerprint = ?",
+                    "SELECT last_sent, count_since_last_sent, muted, backoff_multiplier "
+                    "FROM error_groups WHERE fingerprint = ?",
                     (fingerprint,),
                 ).fetchone()
                 muted = bool(row[2]) if row else False
+                multiplier = row[3] if row else 1
+                effective_window = rate_limit_seconds * multiplier
                 if not muted and (
-                    row is None or row[0] is None or now - row[0] >= rate_limit_seconds
+                    row is None or row[0] is None or now - row[0] >= effective_window
                 ):
                     send, skipped = True, (row[1] if row else 0)
+                    # Chronic (occurrences piled up while suppressed) doubles the
+                    # backoff, capped at _MAX_BACKOFF_MULTIPLIER; a single fresh
+                    # occurrence after a genuine quiet spell resets it to 1.
+                    new_multiplier = (
+                        min(multiplier * 2, _MAX_BACKOFF_MULTIPLIER) if skipped else 1
+                    )
                     conn.execute(
                         """
                         INSERT INTO error_groups
                             (fingerprint, exc_type, location, first_seen, last_seen,
-                             last_sent, count_since_last_sent, total_count, rate_limit_seconds)
-                        VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?)
+                             last_sent, count_since_last_sent, total_count,
+                             rate_limit_seconds, backoff_multiplier)
+                        VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?)
                         ON CONFLICT(fingerprint) DO UPDATE SET
                             last_seen = excluded.last_seen,
                             last_sent = excluded.last_sent,
                             count_since_last_sent = 0,
                             total_count = total_count + 1,
-                            rate_limit_seconds = excluded.rate_limit_seconds
+                            rate_limit_seconds = excluded.rate_limit_seconds,
+                            backoff_multiplier = excluded.backoff_multiplier
                         """,
                         (
                             fingerprint,
@@ -93,6 +109,7 @@ def _should_send(
                             now,
                             now,
                             rate_limit_seconds,
+                            new_multiplier,
                         ),
                     )
                 else:

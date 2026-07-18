@@ -100,6 +100,36 @@ uv run devalerts clear abc12345   # or: devalerts clear --all
 Unmuting resends the next occurrence with the accumulated skip count, same
 as a rate-limit window expiring.
 
+Error groups that keep piling up while suppressed are chronic: each such
+resend doubles the effective `rate_limit_seconds` for that group (capped at
+8x), so a crash loop backs itself off instead of paging you every window
+forever. A group that goes quiet and reappears once resets to the base rate
+immediately. The dashboard shows the active multiplier (`● sending ×4`).
+
+## Context: hostname and tags
+
+Every alert automatically includes the sending host, so you can tell which
+process/server it came from when one bot serves several:
+
+```python
+devalerts.init(bot_token="...", chat_id=123456789, tags={"env": "production"})
+```
+
+```
+🔴 ValueError: boom
+🖥️ prod-web-2 (env=production)
+```
+
+Add ad-hoc tags to a single call — they override `init()`'s tags on a key
+collision:
+
+```python
+devalerts.report(extra={"request_id": "abc123"})
+
+@devalerts.capture(extra={"job": "nightly-sync"})
+def run_job(): ...
+```
+
 ## Manually reporting a caught exception
 
 ```python
@@ -187,6 +217,9 @@ paths.
 - Basic secret redaction only (a few common token/key patterns) — do not
   rely on this for sensitive production data; scrub what you can before it
   ever reaches an exception message.
+- If Telegram delivery fails after retrying, the alert (already redacted, if
+  `redact=True`) is appended to `~/.devalerts/failed.log` instead of being
+  dropped — clean it up like any other local log file.
 
 ## What this does NOT do (by design)
 

@@ -98,7 +98,7 @@ def _dashboard(as_json: bool = False) -> int:
     try:
         rows = conn.execute(
             "SELECT fingerprint, exc_type, location, last_seen, last_sent, total_count, "
-            "count_since_last_sent, rate_limit_seconds, muted "
+            "count_since_last_sent, rate_limit_seconds, muted, backoff_multiplier "
             "FROM error_groups ORDER BY last_seen DESC"
         ).fetchall()
     finally:
@@ -122,12 +122,13 @@ def _dashboard(as_json: bool = False) -> int:
             count_since_last_sent,
             rate_limit_seconds,
             muted,
+            backoff_multiplier,
         ) in rows:
             limit = (
                 rate_limit_seconds
                 if rate_limit_seconds is not None
                 else _DEFAULT_RATE_LIMIT_SECONDS
-            )
+            ) * backoff_multiplier
             rate_limited = (
                 not muted and last_sent is not None and now - last_sent < limit
             )
@@ -142,6 +143,7 @@ def _dashboard(as_json: bool = False) -> int:
                     "count_since_last_sent": count_since_last_sent,
                     "rate_limited": rate_limited,
                     "muted": bool(muted),
+                    "backoff_multiplier": backoff_multiplier,
                 }
             )
         print(json.dumps(groups))
@@ -174,7 +176,9 @@ def _dashboard(as_json: bool = False) -> int:
         _count_since_last_sent,
         rate_limit_seconds,
         muted,
+        backoff_multiplier,
     ) in rows:
+        backoff_suffix = f" ×{backoff_multiplier}" if backoff_multiplier > 1 else ""
         if muted:
             muted_count += 1
             status = style.dim(f"{dot_char} muted")
@@ -183,13 +187,13 @@ def _dashboard(as_json: bool = False) -> int:
                 rate_limit_seconds
                 if rate_limit_seconds is not None
                 else _DEFAULT_RATE_LIMIT_SECONDS
-            )
+            ) * backoff_multiplier
             in_window = last_sent is not None and now - last_sent < limit
             if in_window:
                 limited_count += 1
-                status = style.red(f"{dot_char} limited")
+                status = style.red(f"{dot_char} limited{backoff_suffix}")
             else:
-                status = style.green(f"{dot_char} sending")
+                status = style.green(f"{dot_char} sending{backoff_suffix}")
 
         row = (
             f"  {style.dim(f'{fingerprint[:8]:<8}')}  "

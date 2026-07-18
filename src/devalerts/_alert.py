@@ -3,13 +3,27 @@
 from __future__ import annotations
 
 import re
+import socket
 import traceback
 
 _MAX_MESSAGE_LENGTH = 4096
 
 
-def _format_alert(exc_type, exc_value, tb, skipped: int = 0) -> str:
-    header = f"\U0001f534 {exc_type.__name__}: {exc_value}"
+def _format_context(tags: dict[str, str] | None) -> str:
+    try:
+        hostname = socket.gethostname()
+    except OSError:
+        hostname = "unknown-host"
+    line = f"🖥️ {hostname}"
+    if tags:
+        line += " (" + ", ".join(f"{key}={value}" for key, value in tags.items()) + ")"
+    return line
+
+
+def _format_alert(
+    exc_type, exc_value, tb, skipped: int = 0, tags: dict[str, str] | None = None
+) -> str:
+    header = f"\U0001f534 {exc_type.__name__}: {exc_value}\n{_format_context(tags)}"
     if skipped:
         header += f"\n⚠️ Повторилась ещё {skipped} раз(а) с последнего алерта"
     body = "".join(traceback.format_exception(exc_type, exc_value, tb))
