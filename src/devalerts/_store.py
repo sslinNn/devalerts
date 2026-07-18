@@ -35,10 +35,23 @@ def _get_connection() -> sqlite3.Connection:
             last_seen REAL NOT NULL,
             last_sent REAL,
             count_since_last_sent INTEGER NOT NULL DEFAULT 0,
-            total_count INTEGER NOT NULL DEFAULT 0
+            total_count INTEGER NOT NULL DEFAULT 0,
+            rate_limit_seconds INTEGER,
+            muted INTEGER NOT NULL DEFAULT 0
         )
         """
     )
+    # ponytail: lazy migration for DBs created before rate_limit_seconds/muted
+    # existed -- ADD COLUMN has no "IF NOT EXISTS", so swallow the duplicate-
+    # column error on every subsequent call instead of tracking schema version.
+    for ddl in (
+        "ALTER TABLE error_groups ADD COLUMN rate_limit_seconds INTEGER",
+        "ALTER TABLE error_groups ADD COLUMN muted INTEGER NOT NULL DEFAULT 0",
+    ):
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass
     return conn
 
 
@@ -51,35 +64,50 @@ def _should_send(
         try:
             with conn:
                 row = conn.execute(
-                    "SELECT last_sent, count_since_last_sent FROM error_groups WHERE fingerprint = ?",
+                    "SELECT last_sent, count_since_last_sent, muted FROM error_groups WHERE fingerprint = ?",
                     (fingerprint,),
                 ).fetchone()
-                if row is None or row[0] is None or now - row[0] >= rate_limit_seconds:
+                muted = bool(row[2]) if row else False
+                if not muted and (
+                    row is None or row[0] is None or now - row[0] >= rate_limit_seconds
+                ):
                     send, skipped = True, (row[1] if row else 0)
                     conn.execute(
                         """
                         INSERT INTO error_groups
                             (fingerprint, exc_type, location, first_seen, last_seen,
-                             last_sent, count_since_last_sent, total_count)
-                        VALUES (?, ?, ?, ?, ?, ?, 0, 1)
+                             last_sent, count_since_last_sent, total_count, rate_limit_seconds)
+                        VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?)
                         ON CONFLICT(fingerprint) DO UPDATE SET
                             last_seen = excluded.last_seen,
                             last_sent = excluded.last_sent,
                             count_since_last_sent = 0,
-                            total_count = total_count + 1
+                            total_count = total_count + 1,
+                            rate_limit_seconds = excluded.rate_limit_seconds
                         """,
-                        (fingerprint, exc_type_name, location, now, now, now),
+                        (
+                            fingerprint,
+                            exc_type_name,
+                            location,
+                            now,
+                            now,
+                            now,
+                            rate_limit_seconds,
+                        ),
                     )
                 else:
+                    # Covers both "still rate-limited" and "muted" -- neither sends,
+                    # both keep counting so an eventual unmute/window-expiry reports
+                    # the accumulated skip count via count_since_last_sent.
                     send, skipped = False, 0
                     conn.execute(
                         """
                         UPDATE error_groups
                         SET last_seen = ?, count_since_last_sent = count_since_last_sent + 1,
-                            total_count = total_count + 1
+                            total_count = total_count + 1, rate_limit_seconds = ?
                         WHERE fingerprint = ?
                         """,
-                        (now, fingerprint),
+                        (now, rate_limit_seconds, fingerprint),
                     )
                 conn.execute(
                     "DELETE FROM error_groups WHERE last_seen < ?",
@@ -96,3 +124,51 @@ def _should_send(
             file=sys.stderr,
         )
         return True, 0
+
+
+def _match_fingerprints(prefix: str) -> list[str]:
+    """Fingerprints starting with prefix, for CLI mute/unmute/clear commands."""
+    conn = _get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT fingerprint FROM error_groups WHERE fingerprint LIKE ? ESCAPE '\\'",
+            (
+                prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                + "%",
+            ),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [row[0] for row in rows]
+
+
+def _set_muted(fingerprint: str, muted: bool) -> None:
+    conn = _get_connection()
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE error_groups SET muted = ? WHERE fingerprint = ?",
+                (int(muted), fingerprint),
+            )
+    finally:
+        conn.close()
+
+
+def _clear(fingerprint: str) -> None:
+    conn = _get_connection()
+    try:
+        with conn:
+            conn.execute(
+                "DELETE FROM error_groups WHERE fingerprint = ?", (fingerprint,)
+            )
+    finally:
+        conn.close()
+
+
+def _clear_all() -> None:
+    conn = _get_connection()
+    try:
+        with conn:
+            conn.execute("DELETE FROM error_groups")
+    finally:
+        conn.close()

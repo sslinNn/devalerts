@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import time
 
@@ -101,3 +102,107 @@ def test_version_flag_prints_installed_version(capsys):
 
     assert exc_info.value.code == 0
     assert "devalerts" in capsys.readouterr().out
+
+
+def test_dashboard_uses_configured_rate_limit_not_default(capsys):
+    _store._should_send("fp", "ValueError", "app.py:1", rate_limit_seconds=30)
+    conn = sqlite3.connect(cli._DB_PATH)
+    conn.execute(
+        "UPDATE error_groups SET last_sent = ? WHERE fingerprint = ?",
+        (time.time() - 60, "fp"),
+    )
+    conn.commit()
+    conn.close()
+
+    # 60s have passed: past the configured 30s limit, still inside the 300s default.
+    assert cli._dashboard() == 0
+    assert "sending" in capsys.readouterr().out
+
+
+def test_dashboard_json_output(capsys):
+    _store._should_send("fp", "ValueError", "app.py:1", rate_limit_seconds=300)
+
+    assert cli._dashboard(as_json=True) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data == [
+        {
+            "fingerprint": "fp",
+            "exc_type": "ValueError",
+            "location": "app.py:1",
+            "last_seen": data[0]["last_seen"],
+            "last_sent": data[0]["last_sent"],
+            "total_count": 1,
+            "count_since_last_sent": 0,
+            "rate_limited": True,
+            "muted": False,
+        }
+    ]
+
+
+def test_dashboard_json_empty(capsys):
+    assert cli._dashboard(as_json=True) == 0
+    assert json.loads(capsys.readouterr().out) == []
+
+
+def test_main_dashboard_json_flag(capsys):
+    assert cli.main(["dashboard", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == []
+
+
+def test_mute_then_dashboard_shows_muted(capsys):
+    _store._should_send("abcdef1234", "ValueError", "app.py:1", rate_limit_seconds=300)
+
+    assert cli.main(["mute", "abcdef"]) == 0
+    assert "Muted abcdef12." in capsys.readouterr().out
+
+    assert cli._dashboard() == 0
+    output = capsys.readouterr().out
+    assert "muted" in output
+    assert "1 muted." in output
+
+
+def test_unmute_restores_normal_status(capsys):
+    _store._should_send("abcdef1234", "ValueError", "app.py:1", rate_limit_seconds=300)
+    cli.main(["mute", "abcdef"])
+    capsys.readouterr()
+
+    assert cli.main(["unmute", "abcdef"]) == 0
+    assert "Unmuted abcdef12." in capsys.readouterr().out
+
+
+def test_mute_unknown_fingerprint_fails(capsys):
+    exit_code = cli.main(["mute", "nosuchfp"])
+    assert exit_code == 1
+    assert "No error group matches" in capsys.readouterr().err
+
+
+def test_mute_ambiguous_prefix_fails(capsys):
+    _store._should_send("abc111", "ValueError", "app.py:1", rate_limit_seconds=300)
+    _store._should_send("abc222", "ValueError", "app.py:1", rate_limit_seconds=300)
+
+    exit_code = cli.main(["mute", "abc"])
+    assert exit_code == 1
+    assert "matches 2 error groups" in capsys.readouterr().err
+
+
+def test_clear_removes_single_group(capsys):
+    _store._should_send("fp", "ValueError", "app.py:1", rate_limit_seconds=300)
+
+    assert cli.main(["clear", "fp"]) == 0
+    assert "Cleared fp." in capsys.readouterr().out
+    assert _store._match_fingerprints("fp") == []
+
+
+def test_clear_all_removes_every_group(capsys):
+    _store._should_send("fp1", "ValueError", "app.py:1", rate_limit_seconds=300)
+    _store._should_send("fp2", "ValueError", "app.py:1", rate_limit_seconds=300)
+
+    assert cli.main(["clear", "--all"]) == 0
+    assert "Cleared all error groups." in capsys.readouterr().out
+    assert _store._match_fingerprints("fp") == []
+
+
+def test_clear_unknown_fingerprint_fails(capsys):
+    exit_code = cli.main(["clear", "nosuchfp"])
+    assert exit_code == 1
+    assert "No error group matches" in capsys.readouterr().err

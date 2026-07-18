@@ -90,6 +90,18 @@ uv run devalerts dashboard
 
 ![вывод devalerts dashboard](https://raw.githubusercontent.com/sslinNn/devalerts/main/docs/dashboard.svg)
 
+Флаг `--json` даёт машиночитаемый вывод. Заглушить шумную группу можно прямо
+из CLI — колонка `ID` принимает любой уникальный префикс:
+
+```
+uv run devalerts mute abc12345
+uv run devalerts unmute abc12345
+uv run devalerts clear abc12345   # или: devalerts clear --all
+```
+
+После `unmute` следующее срабатывание отправится с учётом накопленного за
+время заглушки счётчика повторов — так же, как при истечении окна rate-limit.
+
 ## Ручная отправка пойманного исключения
 
 ```python

@@ -6,6 +6,14 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- `devalerts mute <fingerprint>` / `devalerts unmute <fingerprint>`: silence
+  or re-enable alerts for a specific error group without touching code.
+  Unmuting resends with the accumulated skip count, same as a rate-limit
+  window expiring.
+- `devalerts clear <fingerprint>` / `devalerts clear --all`: delete error
+  group(s) from local state. All three commands accept a unique prefix of
+  the fingerprint (the `ID` column shown by `dashboard`).
+- `devalerts dashboard --json`: machine-readable output for scripting.
 - `devalerts test --bot-token ... --chat-id ...` CLI command: sends a one-off
   message so you can verify `bot_token`/`chat_id` are wired up correctly
   before touching any code.
@@ -13,6 +21,12 @@ All notable changes to this project are documented here.
   `_excepthook`/`_threading_excepthook`'s "must never raise" guarantee,
   raising overall coverage from 86% to 95%.
 - GitHub repo topics for discoverability.
+
+### Fixed
+
+- `devalerts dashboard` now uses each error group's actually configured
+  `rate_limit_seconds` (persisted to the local DB) to decide `limited` vs
+  `sending` status, instead of always assuming the library default.
 
 ### Changed
 

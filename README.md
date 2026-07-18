@@ -88,6 +88,18 @@ uv run devalerts dashboard
 
 ![devalerts dashboard output](https://raw.githubusercontent.com/sslinNn/devalerts/main/docs/dashboard.svg)
 
+Pass `--json` for machine-readable output. Silence a noisy group without
+touching code — the `ID` column accepts any unique prefix:
+
+```
+uv run devalerts mute abc12345
+uv run devalerts unmute abc12345
+uv run devalerts clear abc12345   # or: devalerts clear --all
+```
+
+Unmuting resends the next occurrence with the accumulated skip count, same
+as a rate-limit window expiring.
+
 ## Manually reporting a caught exception
 
 ```python

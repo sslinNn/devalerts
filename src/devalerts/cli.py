@@ -4,13 +4,21 @@ state DB; `devalerts test` sends a one-off message to verify bot_token/chat_id."
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sqlite3
 import sys
 import time
 from importlib.metadata import version as _pkg_version
 
-from ._store import _DB_PATH, _DEFAULT_RATE_LIMIT_SECONDS
+from ._store import (
+    _DB_PATH,
+    _DEFAULT_RATE_LIMIT_SECONDS,
+    _clear,
+    _clear_all,
+    _match_fingerprints,
+    _set_muted,
+)
 from ._telegram import _send_telegram_message
 
 _LOCATION_WIDTH = 34
@@ -81,22 +89,62 @@ class _Style:
         return self._wrap("32", text)
 
 
-def _dashboard() -> int:
+def _dashboard(as_json: bool = False) -> int:
     if not _DB_PATH.exists():
-        print("No errors recorded yet.")
+        print("[]" if as_json else "No errors recorded yet.")
         return 0
 
     conn = sqlite3.connect(_DB_PATH)
     try:
         rows = conn.execute(
-            "SELECT fingerprint, exc_type, location, last_seen, last_sent, total_count "
+            "SELECT fingerprint, exc_type, location, last_seen, last_sent, total_count, "
+            "count_since_last_sent, rate_limit_seconds, muted "
             "FROM error_groups ORDER BY last_seen DESC"
         ).fetchall()
     finally:
         conn.close()
 
     if not rows:
-        print("No errors recorded yet.")
+        print("[]" if as_json else "No errors recorded yet.")
+        return 0
+
+    now = time.time()
+
+    if as_json:
+        groups = []
+        for (
+            fingerprint,
+            exc_type,
+            location,
+            last_seen,
+            last_sent,
+            total_count,
+            count_since_last_sent,
+            rate_limit_seconds,
+            muted,
+        ) in rows:
+            limit = (
+                rate_limit_seconds
+                if rate_limit_seconds is not None
+                else _DEFAULT_RATE_LIMIT_SECONDS
+            )
+            rate_limited = (
+                not muted and last_sent is not None and now - last_sent < limit
+            )
+            groups.append(
+                {
+                    "fingerprint": fingerprint,
+                    "exc_type": exc_type,
+                    "location": location,
+                    "last_seen": last_seen,
+                    "last_sent": last_sent,
+                    "total_count": total_count,
+                    "count_since_last_sent": count_since_last_sent,
+                    "rate_limited": rate_limited,
+                    "muted": bool(muted),
+                }
+            )
+        print(json.dumps(groups))
         return 0
 
     unicode_ok = _supports_unicode()
@@ -105,7 +153,6 @@ def _dashboard() -> int:
     ellipsis = "…" if unicode_ok else "..."
 
     style = _Style(_color_enabled())
-    now = time.time()
     type_width = max(len("TYPE"), *(len(r[1]) for r in rows))
 
     header = (
@@ -116,19 +163,33 @@ def _dashboard() -> int:
     print("  " + sep_char * (len(header) - 2))
 
     limited_count = 0
-    for fingerprint, exc_type, location, last_seen, last_sent, total_count in rows:
-        # ponytail: dashboard runs in a separate process from init(), so it
-        # doesn't know the app's actual rate_limit_seconds -- uses the
-        # library default. Upgrade to persisting the configured value if
-        # apps commonly override it.
-        in_window = (
-            last_sent is not None and now - last_sent < _DEFAULT_RATE_LIMIT_SECONDS
-        )
-        if in_window:
-            limited_count += 1
-            status = style.red(f"{dot_char} limited")
+    muted_count = 0
+    for (
+        fingerprint,
+        exc_type,
+        location,
+        last_seen,
+        last_sent,
+        total_count,
+        _count_since_last_sent,
+        rate_limit_seconds,
+        muted,
+    ) in rows:
+        if muted:
+            muted_count += 1
+            status = style.dim(f"{dot_char} muted")
         else:
-            status = style.green(f"{dot_char} sending")
+            limit = (
+                rate_limit_seconds
+                if rate_limit_seconds is not None
+                else _DEFAULT_RATE_LIMIT_SECONDS
+            )
+            in_window = last_sent is not None and now - last_sent < limit
+            if in_window:
+                limited_count += 1
+                status = style.red(f"{dot_char} limited")
+            else:
+                status = style.green(f"{dot_char} sending")
 
         row = (
             f"  {style.dim(f'{fingerprint[:8]:<8}')}  "
@@ -140,7 +201,48 @@ def _dashboard() -> int:
         print(row)
 
     plural = "" if len(rows) == 1 else "s"
-    print(f"\n{len(rows)} error group{plural}, {limited_count} currently rate-limited.")
+    print(
+        f"\n{len(rows)} error group{plural}, {limited_count} currently rate-limited, "
+        f"{muted_count} muted."
+    )
+    return 0
+
+
+def _resolve_fingerprint(prefix: str) -> str | None:
+    matches = _match_fingerprints(prefix)
+    if not matches:
+        print(f"No error group matches '{prefix}'.", file=sys.stderr)
+        return None
+    if len(matches) > 1:
+        print(
+            f"'{prefix}' matches {len(matches)} error groups, be more specific.",
+            file=sys.stderr,
+        )
+        return None
+    return matches[0]
+
+
+def _mute_command(prefix: str, muted: bool) -> int:
+    fingerprint = _resolve_fingerprint(prefix)
+    if fingerprint is None:
+        return 1
+    _set_muted(fingerprint, muted)
+    print(f"{'Muted' if muted else 'Unmuted'} {fingerprint[:8]}.")
+    return 0
+
+
+def _clear_command(prefix: str | None, clear_all: bool) -> int:
+    if clear_all:
+        _clear_all()
+        print("Cleared all error groups.")
+        return 0
+    # argparse's mutually exclusive group guarantees exactly one is set.
+    assert prefix is not None
+    fingerprint = _resolve_fingerprint(prefix)
+    if fingerprint is None:
+        return 1
+    _clear(fingerprint)
+    print(f"Cleared {fingerprint[:8]}.")
     return 0
 
 
@@ -163,18 +265,47 @@ def main(argv: list[str] | None = None) -> int:
         "--version", action="version", version=f"devalerts {_pkg_version('devalerts')}"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("dashboard", help="Show grouped/rate-limited errors")
+    dashboard_parser = subparsers.add_parser(
+        "dashboard", help="Show grouped/rate-limited errors"
+    )
+    dashboard_parser.add_argument(
+        "--json", action="store_true", help="Output as JSON instead of a table"
+    )
     test_parser = subparsers.add_parser(
         "test", help="Send a test message to verify bot_token/chat_id"
     )
     test_parser.add_argument("--bot-token", required=True)
     test_parser.add_argument("--chat-id", required=True)
+    mute_parser = subparsers.add_parser("mute", help="Silence a specific error group")
+    mute_parser.add_argument(
+        "fingerprint", help="Fingerprint or unique prefix (dashboard ID column)"
+    )
+    unmute_parser = subparsers.add_parser(
+        "unmute", help="Re-enable alerts for a muted error group"
+    )
+    unmute_parser.add_argument("fingerprint", help="Fingerprint or unique prefix")
+    clear_parser = subparsers.add_parser(
+        "clear", help="Delete error group(s) from local state"
+    )
+    clear_target = clear_parser.add_mutually_exclusive_group(required=True)
+    clear_target.add_argument(
+        "fingerprint", nargs="?", help="Fingerprint or unique prefix"
+    )
+    clear_target.add_argument(
+        "--all", action="store_true", help="Delete all error groups"
+    )
     args = parser.parse_args(argv)
 
     if args.command == "dashboard":
-        return _dashboard()
+        return _dashboard(as_json=args.json)
     if args.command == "test":
         return _test(args.bot_token, args.chat_id)
+    if args.command == "mute":
+        return _mute_command(args.fingerprint, muted=True)
+    if args.command == "unmute":
+        return _mute_command(args.fingerprint, muted=False)
+    if args.command == "clear":
+        return _clear_command(args.fingerprint, args.all)
     return 1
 
 
