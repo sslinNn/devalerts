@@ -31,8 +31,11 @@ def _format_alert(
     skipped: int = 0,
     tags: dict[str, str] | None = None,
     blame: str | None = None,
+    is_new: bool = False,
 ) -> str:
     header = f"\U0001f534 {exc_type.__name__}: {exc_value}\n{_format_context(tags)}"
+    if is_new:
+        header = f"🆕 New error\n{header}"
     if blame:
         header += f"\n🕵️ blame: {blame}"
     if skipped:
@@ -65,10 +68,13 @@ def _format_log_alert(
     message: str,
     skipped: int = 0,
     tags: dict[str, str] | None = None,
+    is_new: bool = False,
 ) -> str:
     header = (
         f"\U0001f534 {logger_name} ({level_name}): {message}\n{_format_context(tags)}"
     )
+    if is_new:
+        header = f"🆕 New error\n{header}"
     if skipped:
         header += f"\n⚠️ Повторилась ещё {skipped} раз(а) с последнего алерта"
     return _escape_html(header[:_MAX_MESSAGE_LENGTH])

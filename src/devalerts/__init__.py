@@ -69,7 +69,7 @@ def _send_exception(
         print("devalerts: init() was not called, dropping alert", file=sys.stderr)
         return
     fingerprint, location = _fingerprint(exc_type, tb)
-    send, skipped = _should_send(
+    send, skipped, is_new = _should_send(
         fingerprint, exc_type.__name__, location, _state["rate_limit_seconds"]
     )
     if not send:
@@ -77,7 +77,7 @@ def _send_exception(
     tags = {**_state["tags"], **(extra or {})}
     blame = _git_blame_for_traceback(tb) if _state["blame"] else None
     message = _format_alert(
-        exc_type, exc_value, tb, skipped=skipped, tags=tags, blame=blame
+        exc_type, exc_value, tb, skipped=skipped, tags=tags, blame=blame, is_new=is_new
     )
     if _state["redact"]:
         message = _redact(message)
@@ -91,14 +91,19 @@ def _send_log(record: logging.LogRecord, extra: dict[str, str] | None = None) ->
     fingerprint, location = _fingerprint_log(
         record.name, record.levelno, str(record.msg), record.pathname, record.lineno
     )
-    send, skipped = _should_send(
+    send, skipped, is_new = _should_send(
         fingerprint, record.name, location, _state["rate_limit_seconds"]
     )
     if not send:
         return
     tags = {**_state["tags"], **(extra or {})}
     message = _format_log_alert(
-        record.name, record.levelname, record.getMessage(), skipped=skipped, tags=tags
+        record.name,
+        record.levelname,
+        record.getMessage(),
+        skipped=skipped,
+        tags=tags,
+        is_new=is_new,
     )
     if _state["redact"]:
         message = _redact(message)

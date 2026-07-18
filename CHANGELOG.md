@@ -6,6 +6,9 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- Alerts now mark the first-ever occurrence of an error group with a `🆕
+  New error` badge, so a genuinely new bug stands out from a chronic one
+  that just came back out of its rate-limit window.
 - `devalerts.init(..., blame=True)`: runs `git blame` on the line that raised
   and adds the author, short commit hash, and date to the alert (`🕵️ blame:
   sslinNn · a1b2c3d · 2026-07-15 (3d ago)`). Best-effort — silently skipped if

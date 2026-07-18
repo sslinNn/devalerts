@@ -176,6 +176,30 @@ def test_report_skips_git_blame_lookup_by_default(isolated, monkeypatch):
     assert "blame" not in isolated[0]
 
 
+def test_report_marks_first_occurrence_as_new(isolated):
+    devalerts.report(ValueError("brand new"))
+    assert "New error" in isolated[0]
+
+
+def test_report_does_not_mark_repeat_occurrence_as_new(isolated, monkeypatch):
+    monkeypatch.setitem(devalerts._state, "rate_limit_seconds", 0)
+
+    def _boom():
+        raise ValueError("seen before")
+
+    try:
+        _boom()
+    except ValueError as exc:
+        devalerts.report(exc)
+    try:
+        _boom()
+    except ValueError as exc:
+        devalerts.report(exc)
+
+    assert "New error" in isolated[0]
+    assert "New error" not in isolated[1]
+
+
 def test_report_includes_blame_when_enabled(isolated, monkeypatch):
     monkeypatch.setitem(devalerts._state, "blame", True)
     monkeypatch.setattr(

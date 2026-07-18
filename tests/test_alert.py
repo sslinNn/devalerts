@@ -53,6 +53,18 @@ def test_format_alert_no_blame_line_when_none():
     assert "blame" not in message
 
 
+def test_format_alert_marks_new_error():
+    exc_type, exc_value, tb = _make_tb()
+    message = _format_alert(exc_type, exc_value, tb, is_new=True)
+    assert message.startswith("🆕 New error")
+
+
+def test_format_alert_no_new_marker_by_default():
+    exc_type, exc_value, tb = _make_tb()
+    message = _format_alert(exc_type, exc_value, tb)
+    assert "New error" not in message
+
+
 def test_format_alert_truncates_long_body(monkeypatch):
     monkeypatch.setattr(_alert, "_MAX_MESSAGE_LENGTH", 100)
     exc_type, exc_value, tb = _make_tb("boom")
