@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## [0.2.3] - 2026-07-18
+
+### Fixed
+
+- `devalerts dashboard` no longer crashes with `UnicodeEncodeError` on
+  consoles using a legacy codepage (e.g. `cp1251`) when a group's backoff
+  multiplier is shown — the `×` suffix (`limited ×2`) now falls back to
+  `x2` like the dashboard's other unicode characters already did.
+
+### Added
+
+- README: demo GIF showing setup, the dashboard, `mute`, and a real alert
+  landing in Telegram with the collapsed traceback.
+
 ## [0.2.2] - 2026-07-18
 
 ### Added
