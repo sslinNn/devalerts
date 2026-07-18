@@ -3,17 +3,30 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import sys
 import threading
 from types import TracebackType
 from typing import Callable, Literal, Optional, TypedDict
 
-from ._alert import _format_alert, _redact
+from ._alert import _format_alert, _format_log_alert, _redact
 from ._celery import init_celery
-from ._store import _DEFAULT_RATE_LIMIT_SECONDS, _fingerprint, _should_send
+from ._store import (
+    _DEFAULT_RATE_LIMIT_SECONDS,
+    _fingerprint,
+    _fingerprint_log,
+    _should_send,
+)
 from ._telegram import _send_telegram_message
 
-__all__: list[str] = ["init", "report", "capture", "ASGIMiddleware", "init_celery"]
+__all__: list[str] = [
+    "init",
+    "report",
+    "capture",
+    "ASGIMiddleware",
+    "LogHandler",
+    "init_celery",
+]
 
 _ExceptHook = Callable[
     [type[BaseException], BaseException, Optional[TracebackType]], object
@@ -60,6 +73,27 @@ def _send_exception(
         return
     tags = {**_state["tags"], **(extra or {})}
     message = _format_alert(exc_type, exc_value, tb, skipped=skipped, tags=tags)
+    if _state["redact"]:
+        message = _redact(message)
+    _send_telegram_message(_state["bot_token"], _state["chat_id"], message)
+
+
+def _send_log(record: logging.LogRecord, extra: dict[str, str] | None = None) -> None:
+    if _state["bot_token"] is None or _state["chat_id"] is None:
+        print("devalerts: init() was not called, dropping alert", file=sys.stderr)
+        return
+    fingerprint, location = _fingerprint_log(
+        record.name, record.levelno, str(record.msg), record.pathname, record.lineno
+    )
+    send, skipped = _should_send(
+        fingerprint, record.name, location, _state["rate_limit_seconds"]
+    )
+    if not send:
+        return
+    tags = {**_state["tags"], **(extra or {})}
+    message = _format_log_alert(
+        record.name, record.levelname, record.getMessage(), skipped=skipped, tags=tags
+    )
     if _state["redact"]:
         message = _redact(message)
     _send_telegram_message(_state["bot_token"], _state["chat_id"], message)
@@ -185,3 +219,38 @@ class ASGIMiddleware:
                 target=_send_exception, args=(exc_type, exc_value, tb), daemon=True
             ).start()
             raise
+
+
+class LogHandler(logging.Handler):
+    """logging.Handler: report ERROR+ log records to Telegram -- catches exceptions
+    that are logged and swallowed (``logger.exception(...)``) rather than left to
+    propagate to ``sys.excepthook``, which never sees them.
+
+    Usage::
+
+        logging.getLogger().addHandler(devalerts.LogHandler())
+
+    A record with ``exc_info`` (``logger.exception()``, or
+    ``logger.error(..., exc_info=True)``) is reported the same way an unhandled
+    instance of that exception would be -- same fingerprint, so logging it and then
+    re-raising sends one alert, not two. A plain ``logger.error("message")`` with no
+    exception is reported as a short text alert, grouped by logger name + level +
+    message.
+    """
+
+    def __init__(
+        self, level: int = logging.ERROR, *, extra: dict[str, str] | None = None
+    ) -> None:
+        super().__init__(level=level)
+        self._extra = extra
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            tags = {"logger": record.name, **(self._extra or {})}
+            if record.exc_info and record.exc_info[0] is not None:
+                exc_type, exc_value, tb = record.exc_info
+                _send_exception(exc_type, exc_value, tb, extra=tags)
+            else:
+                _send_log(record, extra=tags)
+        except Exception:  # noqa: BLE001 - a logging handler must never raise
+            self.handleError(record)

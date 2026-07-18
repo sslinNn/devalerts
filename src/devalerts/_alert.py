@@ -52,6 +52,21 @@ def _format_alert(
     )
 
 
+def _format_log_alert(
+    logger_name: str,
+    level_name: str,
+    message: str,
+    skipped: int = 0,
+    tags: dict[str, str] | None = None,
+) -> str:
+    header = (
+        f"\U0001f534 {logger_name} ({level_name}): {message}\n{_format_context(tags)}"
+    )
+    if skipped:
+        header += f"\n⚠️ Повторилась ещё {skipped} раз(а) с последнего алерта"
+    return _escape_html(header[:_MAX_MESSAGE_LENGTH])
+
+
 # ponytail: fixed pattern list, not exhaustive — catches common
 # token/key shapes only. Upgrade to entropy-based detection if
 # real users report leaked secrets slipping through.

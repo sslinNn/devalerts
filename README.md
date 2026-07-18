@@ -205,6 +205,26 @@ grouping/rate-limiting/redaction path as everything else, tagged with the
 task name and id automatically. Requires Celery to already be installed in
 the worker process — it's imported lazily, not a devalerts dependency.
 
+## Logged (not raised) exceptions
+
+`init()`'s excepthook only ever sees exceptions that stay unhandled — but most
+real errors are caught and logged instead: `logger.exception(...)` inside a
+`try/except` never propagates anywhere. Attach `LogHandler` to catch those too:
+
+```python
+import logging
+
+logging.getLogger().addHandler(devalerts.LogHandler())
+```
+
+A record with `exc_info` (`logger.exception()`, or `logger.error(...,
+exc_info=True)`) is reported like a full exception alert — grouped by the
+same fingerprint an unhandled instance of it would use, so logging it and
+then re-raising sends one alert, not two. A plain `logger.error("message")`
+with no exception attached is reported as a short text alert, grouped by
+logger name + level + message. Defaults to `level=logging.ERROR`; pass
+`extra={...}` for tags added to every alert from this handler.
+
 ## Why not Sentry?
 
 If you already run Sentry/Rollbar/etc., keep using it — devalerts isn't a
@@ -237,6 +257,10 @@ Yes — `init()` installs both `sys.excepthook` and `threading.excepthook`.
 **Works with Celery / background workers?**
 Yes — call [`init_celery()`](#celery) in addition to `init()` to catch
 exceptions raised inside tasks, which the excepthook alone won't see.
+
+**Catches exceptions I log but don't re-raise?**
+Yes — add [`LogHandler`](#logged-not-raised-exceptions) to a logger; the
+excepthook alone never sees a caught-and-logged exception.
 
 **Works on Windows / Linux / macOS?**
 Yes — stdlib only (`urllib`, `sqlite3`, `threading`), no OS-specific code

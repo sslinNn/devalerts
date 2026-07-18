@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+
+- `devalerts.LogHandler`: a `logging.Handler` that reports `ERROR`+ log
+  records to Telegram, catching exceptions that are logged and swallowed
+  (`logger.exception(...)`) rather than left to propagate to
+  `sys.excepthook`, which never sees them. Records with `exc_info` are
+  grouped with the same fingerprint an unhandled instance of that exception
+  would use, so logging it and then re-raising sends one alert, not two.
+  Plain `logger.error("message")` calls with no exception are reported as a
+  short text alert, grouped by logger name + level + message.
+
 ## [0.2.3] - 2026-07-18
 
 ### Fixed

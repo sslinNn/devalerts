@@ -24,6 +24,14 @@ def _fingerprint(exc_type, tb) -> tuple[str, str]:
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16], location
 
 
+def _fingerprint_log(
+    logger_name: str, level: int, msg: str, pathname: str, lineno: int
+) -> tuple[str, str]:
+    location = f"{pathname}:{lineno}"
+    raw = f"{logger_name}:{level}:{msg}:{location}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16], location
+
+
 def _get_connection() -> sqlite3.Connection:
     _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(_DB_PATH, timeout=5)
