@@ -9,10 +9,11 @@ from types import TracebackType
 from typing import Callable, Literal, Optional, TypedDict
 
 from ._alert import _format_alert, _redact
+from ._celery import init_celery
 from ._store import _DEFAULT_RATE_LIMIT_SECONDS, _fingerprint, _should_send
 from ._telegram import _send_telegram_message
 
-__all__: list[str] = ["init", "report", "capture", "ASGIMiddleware"]
+__all__: list[str] = ["init", "report", "capture", "ASGIMiddleware", "init_celery"]
 
 _ExceptHook = Callable[
     [type[BaseException], BaseException, Optional[TracebackType]], object

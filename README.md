@@ -169,6 +169,24 @@ Only exceptions that actually escape as server errors get reported — routing
 404s and raised `HTTPException`s are already turned into responses by the
 framework before the middleware sees them.
 
+## Celery
+
+Same problem as ASGI apps: `init()`'s excepthook never sees exceptions raised
+inside a task, because Celery catches them itself to record the task's
+`FAILURE` state. Call `init_celery()` in addition to `init()`:
+
+```python
+devalerts.init(bot_token="...", chat_id=123456789)
+devalerts.init_celery()
+```
+
+This connects to Celery's `task_failure` signal (fired once a task has
+genuinely failed — retries exhausted or none configured, so retried tasks
+don't spam an alert per attempt) and reports through the same
+grouping/rate-limiting/redaction path as everything else, tagged with the
+task name and id automatically. Requires Celery to already be installed in
+the worker process — it's imported lazily, not a devalerts dependency.
+
 ## Why not Sentry?
 
 If you already run Sentry/Rollbar/etc., keep using it — devalerts isn't a
@@ -199,8 +217,8 @@ you want dedup state to survive restarts — it self-recreates otherwise.
 Yes — `init()` installs both `sys.excepthook` and `threading.excepthook`.
 
 **Works with Celery / background workers?**
-Yes, `init()` in the worker process the same way as in a web process. For
-tasks you catch yourself, use `report()` or `@devalerts.capture()`.
+Yes — call [`init_celery()`](#celery) in addition to `init()` to catch
+exceptions raised inside tasks, which the excepthook alone won't see.
 
 **Works on Windows / Linux / macOS?**
 Yes — stdlib only (`urllib`, `sqlite3`, `threading`), no OS-specific code

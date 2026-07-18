@@ -6,6 +6,12 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- `devalerts.init_celery()`: reports Celery task failures automatically via
+  the `task_failure` signal. `init()`'s excepthook alone never sees
+  exceptions raised inside a task, since Celery catches those itself to
+  record the task's `FAILURE` state — same class of problem `ASGIMiddleware`
+  solves for ASGI request errors. Tags each alert with the task name and id.
+  Celery is imported lazily, not a devalerts dependency.
 - Every alert now includes the sending host (`socket.gethostname()`) — useful
   when one bot serves multiple processes/servers. `init(tags={...})` adds
   global tags to every alert; `report(extra={...})` / `capture(extra={...})`
