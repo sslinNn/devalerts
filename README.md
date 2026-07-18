@@ -24,6 +24,8 @@ That's the whole setup. Two minutes with [@BotFather](https://t.me/BotFather)
 and every unhandled crash — including ones raised in threads — lands in your
 chat instead of a log file nobody's watching.
 
+![devalerts demo](https://raw.githubusercontent.com/sslinNn/devalerts/main/docs/demo.gif)
+
 ## Why devalerts
 
 - **Zero infrastructure.** No SaaS signup, no ingestion server, no API key
