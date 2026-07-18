@@ -24,6 +24,8 @@ devalerts.init(bot_token="123456:ABC-DEF...", chat_id=123456789)
 любой необработанный краш (включая исключения в потоках) прилетает в чат,
 а не в лог-файл, который никто не смотрит.
 
+![демонстрация devalerts](https://raw.githubusercontent.com/sslinNn/devalerts/main/docs/demo.gif)
+
 ## Зачем devalerts
 
 - **Ноль инфраструктуры.** Не нужен аккаунт в SaaS, сервер приёма событий
