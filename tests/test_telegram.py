@@ -31,7 +31,11 @@ def test_send_telegram_message_posts_expected_payload(monkeypatch):
 
     assert ok is True
     assert captured["url"] == "https://api.telegram.org/botTOKEN/sendMessage"
-    assert captured["body"] == {"chat_id": 12345, "text": "hello"}
+    assert captured["body"] == {
+        "chat_id": 12345,
+        "text": "hello",
+        "parse_mode": "HTML",
+    }
     assert captured["timeout"] == _telegram._TIMEOUT_SECONDS
 
 

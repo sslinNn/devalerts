@@ -67,6 +67,10 @@ devalerts.init(bot_token="123456:ABC-DEF...", chat_id=123456789)
 That's it — any unhandled exception (including ones raised in threads) now
 also lands in your Telegram chat.
 
+The traceback itself arrives folded into a collapsed quote — the exception
+type, message, and host are visible right away, tap to expand the full
+traceback. Keeps a big stack trace from taking over the chat.
+
 ## Grouping, rate limiting, and the dashboard
 
 Exceptions are grouped by fingerprint (exception type + file + line where it

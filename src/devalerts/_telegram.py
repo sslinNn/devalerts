@@ -40,7 +40,9 @@ def _log_failed_delivery(text: str) -> None:
 
 def _send_telegram_message(bot_token: str, chat_id: int | str, text: str) -> bool:
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
+    payload = json.dumps(
+        {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    ).encode("utf-8")
     last_error: Exception | None = None
 
     for attempt in range(_MAX_ATTEMPTS):

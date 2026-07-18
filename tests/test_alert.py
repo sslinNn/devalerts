@@ -11,6 +11,15 @@ def _make_tb(msg="boom"):
         return type(exc), exc, exc.__traceback__
 
 
+def _visible_length(html_message: str) -> int:
+    """What Telegram's 4096-char limit actually counts: the parsed text,
+    not our <blockquote expandable> wrapper or HTML-escaped entities."""
+    text = html_message.replace("<blockquote expandable>", "").replace(
+        "</blockquote>", ""
+    )
+    return len(text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&"))
+
+
 def test_format_alert_includes_type_and_message():
     exc_type, exc_value, tb = _make_tb("something broke")
     message = _format_alert(exc_type, exc_value, tb)
@@ -34,7 +43,7 @@ def test_format_alert_truncates_long_body(monkeypatch):
     monkeypatch.setattr(_alert, "_MAX_MESSAGE_LENGTH", 100)
     exc_type, exc_value, tb = _make_tb("boom")
     message = _alert._format_alert(exc_type, exc_value, tb)
-    assert len(message) <= 100
+    assert _visible_length(message) <= 100
     assert "...(truncated)..." in message
 
 
@@ -43,7 +52,8 @@ def test_format_alert_header_alone_exceeds_limit():
     # keep must clamp to 0 instead of going negative and slicing garbage.
     exc_type, exc_value, tb = _make_tb("z" * 20_000)
     message = _format_alert(exc_type, exc_value, tb)
-    assert len(message) == _MAX_MESSAGE_LENGTH
+    assert _visible_length(message) == _MAX_MESSAGE_LENGTH
+    assert "<blockquote" not in message  # nothing left of the body to wrap
 
 
 def test_redact_aws_key():
@@ -84,3 +94,30 @@ def test_format_alert_no_tags_parens_when_no_tags():
     exc_type, exc_value, tb = _make_tb()
     message = _format_alert(exc_type, exc_value, tb)
     assert "(" not in message.splitlines()[1]
+
+
+def test_format_alert_wraps_traceback_in_expandable_blockquote():
+    exc_type, exc_value, tb = _make_tb()
+    message = _format_alert(exc_type, exc_value, tb)
+    assert "<blockquote expandable>" in message
+    assert message.endswith("</blockquote>")
+    header, _, wrapped_body = message.partition("<blockquote expandable>")
+    assert "Traceback" not in header
+    assert "Traceback" in wrapped_body
+
+
+def test_format_alert_escapes_html_special_chars_in_header_and_body():
+    exc_type, exc_value, tb = _make_tb("<script>&boom</script>")
+    message = _format_alert(exc_type, exc_value, tb, tags={"path": "<a>"})
+    assert "<script>" not in message
+    assert "&lt;script&gt;&amp;boom&lt;/script&gt;" in message
+    assert "path=&lt;a&gt;" in message
+
+
+def test_format_alert_html_escaping_survives_redaction(monkeypatch):
+    from devalerts._alert import _redact
+
+    exc_type, exc_value, tb = _make_tb("api_key=<secret>")
+    message = _redact(_format_alert(exc_type, exc_value, tb))
+    assert "api_key=[REDACTED]" in message
+    assert "<secret>" not in message

@@ -9,6 +9,10 @@ import traceback
 _MAX_MESSAGE_LENGTH = 4096
 
 
+def _escape_html(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _format_context(tags: dict[str, str] | None) -> str:
     try:
         hostname = socket.gethostname()
@@ -27,16 +31,25 @@ def _format_alert(
     if skipped:
         header += f"\n⚠️ Повторилась ещё {skipped} раз(а) с последнего алерта"
     body = "".join(traceback.format_exception(exc_type, exc_value, tb))
-    message = f"{header}\n\n{body}"
-    if len(message) <= _MAX_MESSAGE_LENGTH:
-        return message
-    marker = "\n\n...(truncated)...\n"
-    # ponytail: header itself can exceed the limit if exc_value's str() is huge
-    # (e.g. a validation error echoing a large payload) — keep can go negative,
-    # so clamp it and hard-truncate the final result as a backstop guarantee.
-    keep = max(_MAX_MESSAGE_LENGTH - len(header) - len(marker), 0)
-    truncated = f"{header}{marker}{body[-keep:]}" if keep else header
-    return truncated[:_MAX_MESSAGE_LENGTH]
+
+    if len(header) + 2 + len(body) > _MAX_MESSAGE_LENGTH:
+        marker = "\n\n...(truncated)...\n"
+        # ponytail: header itself can exceed the limit if exc_value's str() is huge
+        # (e.g. a validation error echoing a large payload) — keep can go negative,
+        # so clamp it; the header itself gets hard-truncated as a backstop. The "2"
+        # accounts for the "\n\n" separator joined in below.
+        keep = max(_MAX_MESSAGE_LENGTH - len(header) - 2 - len(marker), 0)
+        body = f"{marker}{body[-keep:]}" if keep else ""
+        header = header[:_MAX_MESSAGE_LENGTH]
+
+    # Budgeted above against the plain text -- Telegram's 4096-char limit
+    # applies to the parsed (tag-stripped) text, not the raw HTML we send.
+    escaped_header = _escape_html(header)
+    if not body:
+        return escaped_header
+    return (
+        f"{escaped_header}\n\n<blockquote expandable>{_escape_html(body)}</blockquote>"
+    )
 
 
 # ponytail: fixed pattern list, not exhaustive — catches common

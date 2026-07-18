@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- Messages now send with `parse_mode: "HTML"` and fold the traceback into a
+  collapsed `<blockquote expandable>` — the exception type/message/host are
+  visible immediately, the (often huge) traceback expands on tap instead of
+  dumping a wall of text into the chat. The 4096-char budget is computed
+  against the plain text (what Telegram actually counts), then HTML-escaped
+  and wrapped.
+
 ## [0.2.0] - 2026-07-18
 
 ### Added
