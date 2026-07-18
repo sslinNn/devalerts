@@ -1,5 +1,6 @@
 """CLI: `devalerts dashboard` reports grouped/rate-limited errors from the local
-state DB; `devalerts test` sends a one-off message to verify bot_token/chat_id."""
+state DB; `devalerts test` sends a one-off message to verify bot_token/chat_id
+and/or slack_webhook_url."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Send unhandled Python exceptions straight to a Telegram chat."""
+"""Send unhandled Python exceptions straight to a Telegram chat and/or Slack."""
 
 from __future__ import annotations
 
@@ -299,7 +299,8 @@ class ASGIMiddleware:
 
 
 class LogHandler(logging.Handler):
-    """logging.Handler: report ERROR+ log records to Telegram -- catches exceptions
+    """logging.Handler: report ERROR+ log records to every channel init()
+    configured -- catches exceptions
     that are logged and swallowed (``logger.exception(...)``) rather than left to
     propagate to ``sys.excepthook``, which never sees them.
 
