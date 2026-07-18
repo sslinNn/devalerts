@@ -25,9 +25,16 @@ def _format_context(tags: dict[str, str] | None) -> str:
 
 
 def _format_alert(
-    exc_type, exc_value, tb, skipped: int = 0, tags: dict[str, str] | None = None
+    exc_type,
+    exc_value,
+    tb,
+    skipped: int = 0,
+    tags: dict[str, str] | None = None,
+    blame: str | None = None,
 ) -> str:
     header = f"\U0001f534 {exc_type.__name__}: {exc_value}\n{_format_context(tags)}"
+    if blame:
+        header += f"\n🕵️ blame: {blame}"
     if skipped:
         header += f"\n⚠️ Повторилась ещё {skipped} раз(а) с последнего алерта"
     body = "".join(traceback.format_exception(exc_type, exc_value, tb))

@@ -225,6 +225,23 @@ with no exception attached is reported as a short text alert, grouped by
 logger name + level + message. Defaults to `level=logging.ERROR`; pass
 `extra={...}` for tags added to every alert from this handler.
 
+## Blame
+
+Curious *who* wrote the line that just blew up? `blame=True` runs `git blame`
+on it and adds the author, short commit hash, and date to the alert:
+
+```python
+devalerts.init(bot_token="...", chat_id=123456789, blame=True)
+```
+
+```
+🕵️ blame: sslinNn · a1b2c3d · 2026-07-15 (3d ago)
+```
+
+Best-effort and silent about it — no git installed, no repo (a container
+image without `.git`), or the line isn't committed yet all just skip the
+line instead of failing the alert. Off by default; opt in with `blame=True`.
+
 ## Why not Sentry?
 
 If you already run Sentry/Rollbar/etc., keep using it — devalerts isn't a

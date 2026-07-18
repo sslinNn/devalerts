@@ -155,6 +155,38 @@ def test_init_defaults_tags_to_empty_dict():
     assert devalerts._state["tags"] == {}
 
 
+def test_init_defaults_blame_to_false():
+    devalerts.init("token", 1)
+    assert devalerts._state["blame"] is False
+
+
+def test_init_stores_blame():
+    devalerts.init("token", 1, blame=True)
+    assert devalerts._state["blame"] is True
+
+
+def test_report_skips_git_blame_lookup_by_default(isolated, monkeypatch):
+    monkeypatch.setitem(devalerts._state, "blame", False)
+    calls = []
+    monkeypatch.setattr(
+        devalerts, "_git_blame_for_traceback", lambda tb: calls.append(tb) or "x"
+    )
+    devalerts.report(ValueError("boom"))
+    assert calls == []
+    assert "blame" not in isolated[0]
+
+
+def test_report_includes_blame_when_enabled(isolated, monkeypatch):
+    monkeypatch.setitem(devalerts._state, "blame", True)
+    monkeypatch.setattr(
+        devalerts,
+        "_git_blame_for_traceback",
+        lambda tb: "sslinNn · a1b2c3d · 2026-07-15 (3d ago)",
+    )
+    devalerts.report(ValueError("boom"))
+    assert "blame: sslinNn · a1b2c3d · 2026-07-15 (3d ago)" in isolated[0]
+
+
 def test_init_twice_does_not_chain_to_own_excepthook():
     original_hook = sys.excepthook
     devalerts.init("token", 1)

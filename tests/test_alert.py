@@ -39,6 +39,20 @@ def test_format_alert_no_skipped_marker_by_default():
     assert "Повторилась" not in message
 
 
+def test_format_alert_includes_blame_when_given():
+    exc_type, exc_value, tb = _make_tb()
+    message = _format_alert(
+        exc_type, exc_value, tb, blame="sslinNn · a1b2c3d · 2026-07-15 (3d ago)"
+    )
+    assert "blame: sslinNn · a1b2c3d · 2026-07-15 (3d ago)" in message
+
+
+def test_format_alert_no_blame_line_when_none():
+    exc_type, exc_value, tb = _make_tb()
+    message = _format_alert(exc_type, exc_value, tb)
+    assert "blame" not in message
+
+
 def test_format_alert_truncates_long_body(monkeypatch):
     monkeypatch.setattr(_alert, "_MAX_MESSAGE_LENGTH", 100)
     exc_type, exc_value, tb = _make_tb("boom")

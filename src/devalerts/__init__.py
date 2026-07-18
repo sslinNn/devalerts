@@ -10,6 +10,7 @@ from types import TracebackType
 from typing import Callable, Literal, Optional, TypedDict
 
 from ._alert import _format_alert, _format_log_alert, _redact
+from ._blame import _git_blame_for_traceback
 from ._celery import init_celery
 from ._store import (
     _DEFAULT_RATE_LIMIT_SECONDS,
@@ -40,6 +41,7 @@ class _State(TypedDict):
     redact: bool
     rate_limit_seconds: int
     tags: dict[str, str]
+    blame: bool
     # Seeded with the real default hooks below (never None) -- _excepthook/
     # _threading_excepthook can only ever fire after init() has replaced
     # sys.excepthook/threading.excepthook, by which point these are always
@@ -54,6 +56,7 @@ _state: _State = {
     "redact": True,
     "rate_limit_seconds": _DEFAULT_RATE_LIMIT_SECONDS,
     "tags": {},
+    "blame": False,
     "prev_excepthook": sys.excepthook,
     "prev_threading_excepthook": threading.excepthook,
 }
@@ -72,7 +75,10 @@ def _send_exception(
     if not send:
         return
     tags = {**_state["tags"], **(extra or {})}
-    message = _format_alert(exc_type, exc_value, tb, skipped=skipped, tags=tags)
+    blame = _git_blame_for_traceback(tb) if _state["blame"] else None
+    message = _format_alert(
+        exc_type, exc_value, tb, skipped=skipped, tags=tags, blame=blame
+    )
     if _state["redact"]:
         message = _redact(message)
     _send_telegram_message(_state["bot_token"], _state["chat_id"], message)
@@ -128,13 +134,19 @@ def init(
     redact: bool = True,
     rate_limit_seconds: int = _DEFAULT_RATE_LIMIT_SECONDS,
     tags: dict[str, str] | None = None,
+    blame: bool = False,
 ) -> None:
-    """Install a global exception hook that sends unhandled exceptions to Telegram."""
+    """Install a global exception hook that sends unhandled exceptions to Telegram.
+
+    ``blame=True`` runs ``git blame`` on the line that raised and adds the
+    author/commit/date to the alert -- best-effort, silently skipped if
+    there's no git repo (e.g. a container image without ``.git``)."""
     _state["bot_token"] = bot_token
     _state["chat_id"] = chat_id
     _state["redact"] = redact
     _state["rate_limit_seconds"] = rate_limit_seconds
     _state["tags"] = tags or {}
+    _state["blame"] = blame
     # ponytail: guard against calling init() twice capturing our own hook as
     # "previous" -- that would make _excepthook chain to itself and recurse
     # forever on the next crash, violating "must never raise".

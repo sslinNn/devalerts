@@ -6,6 +6,11 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- `devalerts.init(..., blame=True)`: runs `git blame` on the line that raised
+  and adds the author, short commit hash, and date to the alert (`🕵️ blame:
+  sslinNn · a1b2c3d · 2026-07-15 (3d ago)`). Best-effort — silently skipped if
+  there's no git repo, no `git` binary, or the line isn't committed yet. Off
+  by default.
 - `devalerts.LogHandler`: a `logging.Handler` that reports `ERROR`+ log
   records to Telegram, catching exceptions that are logged and swallowed
   (`logger.exception(...)`) rather than left to propagate to
