@@ -9,6 +9,10 @@ import devalerts
 from devalerts import _store
 
 
+def _module_level_job():
+    raise ValueError("in decorator")
+
+
 class _SyncThread:
     """Runs the target immediately instead of on a real thread, so tests
     don't have to race the ASGI middleware's fire-and-forget reporting."""
@@ -75,6 +79,31 @@ def test_capture_as_decorator(isolated):
     with pytest.raises(ValueError):
         boom()
     assert len(isolated) == 1
+
+
+def test_capture_as_decorator_auto_tags_job_name(isolated):
+    decorated = devalerts.capture()(_module_level_job)
+    with pytest.raises(ValueError):
+        decorated()
+    assert "job=_module_level_job" in isolated[0]
+
+
+def test_capture_context_manager_has_no_job_tag(isolated):
+    with pytest.raises(ValueError):
+        with devalerts.capture():
+            raise ValueError("in context")
+    assert "job=" not in isolated[0]
+
+
+def test_capture_extra_overrides_auto_job_name(isolated):
+    @devalerts.capture(extra={"job": "custom-name"})
+    def nightly_sync():
+        raise ValueError("in decorator")
+
+    with pytest.raises(ValueError):
+        nightly_sync()
+    assert "job=custom-name" in isolated[0]
+    assert "job=nightly_sync" not in isolated[0]
 
 
 def test_capture_does_nothing_on_success(isolated):

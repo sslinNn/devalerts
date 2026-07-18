@@ -124,15 +124,27 @@ devalerts.init(bot_token="...", chat_id=123456789, tags={"env": "production"})
 🖥️ prod-web-2 (env=production)
 ```
 
-Add ad-hoc tags to a single call — they override `init()`'s tags on a key
-collision:
+Add ad-hoc tags to a single call — they override `init()`'s tags (and each
+other) on a key collision:
 
 ```python
 devalerts.report(extra={"request_id": "abc123"})
-
-@devalerts.capture(extra={"job": "nightly-sync"})
-def run_job(): ...
 ```
+
+Used as a decorator, `capture()` tags the alert with the wrapped function's
+name as `job` automatically — no `extra` needed:
+
+```python
+@devalerts.capture()
+def nightly_sync(): ...
+```
+
+```
+🔴 ValueError: boom
+🖥️ prod-web-2 (job=nightly_sync)
+```
+
+Pass `extra={"job": "..."}` explicitly to override the auto-detected name.
 
 ## Manually reporting a caught exception
 

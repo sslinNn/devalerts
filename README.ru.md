@@ -127,15 +127,28 @@ devalerts.init(bot_token="...", chat_id=123456789, tags={"env": "production"})
 🖥️ prod-web-2 (env=production)
 ```
 
-Разовые теги на конкретный вызов — перекрывают теги из `init()` при
-совпадении ключа:
+Разовые теги на конкретный вызов — перекрывают теги из `init()` (и друг
+друга) при совпадении ключа:
 
 ```python
 devalerts.report(extra={"request_id": "abc123"})
-
-@devalerts.capture(extra={"job": "nightly-sync"})
-def run_job(): ...
 ```
+
+Если `capture()` использовать как декоратор, алерт автоматически помечается
+тегом `job` с именем обёрнутой функции — `extra` не нужен:
+
+```python
+@devalerts.capture()
+def nightly_sync(): ...
+```
+
+```
+🔴 ValueError: boom
+🖥️ prod-web-2 (job=nightly_sync)
+```
+
+Передайте `extra={"job": "..."}` явно, чтобы переопределить
+автоопределённое имя.
 
 ## Ручная отправка пойманного исключения
 

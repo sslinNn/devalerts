@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+
+- `capture()` used as a decorator now tags the alert with the wrapped
+  function's `__qualname__` as `job` automatically — no need to pass
+  `extra={"job": ...}` by hand. Explicit `extra` still overrides it on a key
+  collision. A bare `with capture():` block has no function to name, so this
+  only applies to decorator usage.
+
 ## [0.2.1] - 2026-07-18
 
 ### Changed

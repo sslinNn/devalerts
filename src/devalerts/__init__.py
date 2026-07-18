@@ -130,17 +130,29 @@ def report(
 class capture(contextlib.ContextDecorator):
     """Context manager / decorator: report any exception raised inside the block or
     function, then re-raise it. Use ``@capture()`` on a function instead of wrapping
-    its body in a manual ``try/except`` or ``with`` block."""
+    its body in a manual ``try/except`` or ``with`` block.
+
+    Used as a decorator, the wrapped function's name is tagged automatically as
+    ``job`` -- no need to pass ``extra={"job": ...}`` by hand. Used as a bare
+    ``with capture():`` block, there's no function to name, so only explicit
+    ``extra`` tags apply."""
 
     def __init__(self, *, extra: dict[str, str] | None = None) -> None:
         self._extra = extra
+        self._job_name: str | None = None
+
+    def __call__(self, func):
+        self._job_name = func.__qualname__
+        return super().__call__(func)
 
     def __enter__(self) -> "capture":
         return self
 
     def __exit__(self, exc_type, exc_value, tb) -> Literal[False]:
         if exc_type is not None:
-            _send_exception(exc_type, exc_value, tb, extra=self._extra)
+            tags = {"job": self._job_name} if self._job_name else {}
+            tags.update(self._extra or {})
+            _send_exception(exc_type, exc_value, tb, extra=tags)
         return False
 
 
