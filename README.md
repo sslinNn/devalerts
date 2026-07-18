@@ -1,7 +1,7 @@
 # devalerts
 
 [![PyPI](https://img.shields.io/pypi/v/devalerts)](https://pypi.org/project/devalerts/)
-[![Downloads](https://img.shields.io/pypi/dm/devalerts)](https://pypi.org/project/devalerts/)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/devalerts?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/devalerts)
 [![Python versions](https://img.shields.io/pypi/pyversions/devalerts)](https://pypi.org/project/devalerts/)
 [![License: MIT](https://img.shields.io/pypi/l/devalerts)](LICENSE)
 [![Tests](https://img.shields.io/github/actions/workflow/status/sslinNn/devalerts/test.yml?branch=main&label=tests)](https://github.com/sslinNn/devalerts/actions/workflows/test.yml)
