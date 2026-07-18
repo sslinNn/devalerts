@@ -228,6 +228,36 @@ def test_dashboard_shows_backoff_multiplier(capsys):
     assert "×4" in capsys.readouterr().out
 
 
+def test_dashboard_backoff_multiplier_ascii_fallback(capsys, monkeypatch):
+    # Regression: × isn't encodable on every console codepage (e.g. cp1251) --
+    # must use the same ASCII fallback as the other unicode chars, not raise.
+    monkeypatch.setattr(cli, "_supports_unicode", lambda: False)
+    conn = sqlite3.connect(cli._DB_PATH)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS error_groups (
+            fingerprint TEXT PRIMARY KEY, exc_type TEXT NOT NULL, location TEXT NOT NULL,
+            first_seen REAL NOT NULL, last_seen REAL NOT NULL, last_sent REAL,
+            count_since_last_sent INTEGER NOT NULL DEFAULT 0,
+            total_count INTEGER NOT NULL DEFAULT 0, rate_limit_seconds INTEGER,
+            muted INTEGER NOT NULL DEFAULT 0, backoff_multiplier INTEGER NOT NULL DEFAULT 1
+        )
+        """
+    )
+    now = time.time()
+    conn.execute(
+        "INSERT INTO error_groups VALUES ('fp', 'ValueError', 'app.py:1', ?, ?, ?, 0, 1, 100, 0, 4)",
+        (now, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    assert cli._dashboard() == 0
+    output = capsys.readouterr().out
+    assert "x4" in output
+    assert "×" not in output
+
+
 def test_clear_unknown_fingerprint_fails(capsys):
     exit_code = cli.main(["clear", "nosuchfp"])
     assert exit_code == 1

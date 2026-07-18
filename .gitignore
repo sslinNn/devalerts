@@ -9,3 +9,6 @@ __pycache__/
 # uv
 .venv/
 dist/
+
+# demo video production (local, not part of the package)
+demo/

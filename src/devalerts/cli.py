@@ -27,7 +27,7 @@ _LOCATION_WIDTH = 34
 def _supports_unicode() -> bool:
     encoding = getattr(sys.stdout, "encoding", None) or ""
     try:
-        "─●…".encode(encoding)
+        "─●…×".encode(encoding)
         return True
     except (LookupError, UnicodeEncodeError, TypeError):
         return False
@@ -153,6 +153,7 @@ def _dashboard(as_json: bool = False) -> int:
     sep_char = "─" if unicode_ok else "-"
     dot_char = "●" if unicode_ok else "*"
     ellipsis = "…" if unicode_ok else "..."
+    times_char = "×" if unicode_ok else "x"
 
     style = _Style(_color_enabled())
     type_width = max(len("TYPE"), *(len(r[1]) for r in rows))
@@ -178,7 +179,9 @@ def _dashboard(as_json: bool = False) -> int:
         muted,
         backoff_multiplier,
     ) in rows:
-        backoff_suffix = f" ×{backoff_multiplier}" if backoff_multiplier > 1 else ""
+        backoff_suffix = (
+            f" {times_char}{backoff_multiplier}" if backoff_multiplier > 1 else ""
+        )
         if muted:
             muted_count += 1
             status = style.dim(f"{dot_char} muted")
