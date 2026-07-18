@@ -1,5 +1,6 @@
 """CLI: `devalerts dashboard` reports grouped/rate-limited errors from the local
-state DB; `devalerts test` sends a one-off message to verify bot_token/chat_id."""
+state DB; `devalerts test` sends a one-off message to verify bot_token/chat_id
+and/or slack_webhook_url."""
 
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ import sys
 import time
 from importlib.metadata import version as _pkg_version
 
+from ._slack import _send_slack_message
 from ._store import (
     _DB_PATH,
     _DEFAULT_RATE_LIMIT_SECONDS,
@@ -253,16 +255,41 @@ def _clear_command(prefix: str | None, clear_all: bool) -> int:
     return 0
 
 
-def _test(bot_token: str, chat_id: str) -> int:
-    ok = _send_telegram_message(
-        bot_token,
-        chat_id,
-        "✅ devalerts test message -- bot_token and chat_id are wired up correctly.",
-    )
+def _test(
+    bot_token: str | None, chat_id: str | None, slack_webhook_url: str | None
+) -> int:
+    if bool(bot_token) != bool(chat_id):
+        print("--bot-token and --chat-id must be given together.", file=sys.stderr)
+        return 1
+    if not bot_token and not slack_webhook_url:
+        print(
+            "Provide --bot-token/--chat-id and/or --slack-webhook-url.",
+            file=sys.stderr,
+        )
+        return 1
+    ok = True
+    if bot_token and chat_id:
+        ok = (
+            _send_telegram_message(
+                bot_token,
+                chat_id,
+                "✅ devalerts test message -- bot_token and chat_id are wired up "
+                "correctly.",
+            )
+            and ok
+        )
+    if slack_webhook_url:
+        ok = (
+            _send_slack_message(
+                slack_webhook_url,
+                "✅ devalerts test message -- slack_webhook_url is wired up correctly.",
+            )
+            and ok
+        )
     if not ok:
         print("Failed to send test message (see error above).", file=sys.stderr)
         return 1
-    print("Test message sent -- check your Telegram chat.")
+    print("Test message sent -- check your chat.")
     return 0
 
 
@@ -279,10 +306,12 @@ def main(argv: list[str] | None = None) -> int:
         "--json", action="store_true", help="Output as JSON instead of a table"
     )
     test_parser = subparsers.add_parser(
-        "test", help="Send a test message to verify bot_token/chat_id"
+        "test",
+        help="Send a test message to verify bot_token/chat_id and/or slack_webhook_url",
     )
-    test_parser.add_argument("--bot-token", required=True)
-    test_parser.add_argument("--chat-id", required=True)
+    test_parser.add_argument("--bot-token")
+    test_parser.add_argument("--chat-id")
+    test_parser.add_argument("--slack-webhook-url")
     mute_parser = subparsers.add_parser("mute", help="Silence a specific error group")
     mute_parser.add_argument(
         "fingerprint", help="Fingerprint or unique prefix (dashboard ID column)"
@@ -306,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "dashboard":
         return _dashboard(as_json=args.json)
     if args.command == "test":
-        return _test(args.bot_token, args.chat_id)
+        return _test(args.bot_token, args.chat_id, args.slack_webhook_url)
     if args.command == "mute":
         return _mute_command(args.fingerprint, muted=True)
     if args.command == "unmute":

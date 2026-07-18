@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.0] - 2026-07-19
+
+### Added
+
+- `devalerts.init(slack_webhook_url=...)`: Slack delivery via an incoming
+  webhook, alongside or instead of Telegram -- every configured channel
+  gets every alert. Same fingerprint/dedup/rate-limit/redaction/blame path
+  as Telegram; Slack gets mrkdwn formatting instead of HTML. `devalerts
+  test` and `bot_token`/`chat_id` are now independently optional (at least
+  one channel is still required, enforced at `init()` time).
+- Alerts now mark the first-ever occurrence of an error group with a `🆕
+  New error` badge, so a genuinely new bug stands out from a chronic one
+  that just came back out of its rate-limit window.
+- `devalerts.init(..., blame=True)`: runs `git blame` on the line that raised
+  and adds the author, short commit hash, and date to the alert (`🕵️ blame:
+  sslinNn · a1b2c3d · 2026-07-15 (3d ago)`). Best-effort — silently skipped if
+  there's no git repo, no `git` binary, or the line isn't committed yet. Off
+  by default.
+- `devalerts.LogHandler`: a `logging.Handler` that reports `ERROR`+ log
+  records to every channel `init()` configured, catching exceptions that are
+  logged and swallowed (`logger.exception(...)`) rather than left to
+  propagate to `sys.excepthook`, which never sees them. Records with
+  `exc_info` are grouped with the same fingerprint an unhandled instance of
+  that exception would use, so logging it and then re-raising sends one
+  alert, not two. Plain `logger.error("message")` calls with no exception are
+  reported as a short text alert, grouped by logger name + level + message.
+
 ## [0.2.3] - 2026-07-18
 
 ### Fixed

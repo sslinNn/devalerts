@@ -35,29 +35,52 @@ def test_fingerprint_differs_for_different_exception_type():
 
 
 def test_should_send_first_occurrence_sends_immediately():
-    send, skipped = _store._should_send("fp1", "ValueError", "app.py:1", 300)
-    assert (send, skipped) == (True, 0)
+    send, skipped, is_new = _store._should_send("fp1", "ValueError", "app.py:1", 300)
+    assert (send, skipped, is_new) == (True, 0, True)
 
 
 def test_should_send_suppresses_within_rate_limit_window():
     _store._should_send("fp2", "ValueError", "app.py:1", 300)
-    send, skipped = _store._should_send("fp2", "ValueError", "app.py:1", 300)
-    assert (send, skipped) == (False, 0)
+    send, skipped, is_new = _store._should_send("fp2", "ValueError", "app.py:1", 300)
+    assert (send, skipped, is_new) == (False, 0, False)
 
 
 def test_should_send_reports_skipped_count_on_resend():
     fingerprint = "fp3"
-    assert _store._should_send(fingerprint, "ValueError", "app.py:1", 300) == (True, 0)
-    assert _store._should_send(fingerprint, "ValueError", "app.py:1", 300) == (False, 0)
-    assert _store._should_send(fingerprint, "ValueError", "app.py:1", 300) == (False, 0)
+    assert _store._should_send(fingerprint, "ValueError", "app.py:1", 300) == (
+        True,
+        0,
+        True,
+    )
+    assert _store._should_send(fingerprint, "ValueError", "app.py:1", 300) == (
+        False,
+        0,
+        False,
+    )
+    assert _store._should_send(fingerprint, "ValueError", "app.py:1", 300) == (
+        False,
+        0,
+        False,
+    )
     # rate_limit_seconds=0 means "always past the window" -> resends and reports
     # how many occurrences were swallowed since the last alert actually went out.
-    assert _store._should_send(fingerprint, "ValueError", "app.py:1", 0) == (True, 2)
+    assert _store._should_send(fingerprint, "ValueError", "app.py:1", 0) == (
+        True,
+        2,
+        False,
+    )
 
 
 def test_should_send_tracks_fingerprints_independently():
-    assert _store._should_send("fp4", "ValueError", "a.py:1", 300) == (True, 0)
-    assert _store._should_send("fp5", "ValueError", "b.py:2", 300) == (True, 0)
+    assert _store._should_send("fp4", "ValueError", "a.py:1", 300) == (True, 0, True)
+    assert _store._should_send("fp5", "ValueError", "b.py:2", 300) == (True, 0, True)
+
+
+def test_should_send_reports_is_new_false_on_second_occurrence():
+    fingerprint = "fp3b"
+    _store._should_send(fingerprint, "ValueError", "app.py:1", 0)
+    _, _, is_new = _store._should_send(fingerprint, "ValueError", "app.py:1", 0)
+    assert is_new is False
 
 
 def test_should_send_fails_open_on_db_error(monkeypatch, capsys):
@@ -65,8 +88,8 @@ def test_should_send_fails_open_on_db_error(monkeypatch, capsys):
         raise sqlite3.Error("disk full")
 
     monkeypatch.setattr(_store, "_get_connection", _broken_connection)
-    send, skipped = _store._should_send("fp6", "ValueError", "app.py:1", 300)
-    assert (send, skipped) == (True, 0)
+    send, skipped, is_new = _store._should_send("fp6", "ValueError", "app.py:1", 300)
+    assert (send, skipped, is_new) == (True, 0, True)
     assert "dedup/rate-limit state error" in capsys.readouterr().err
 
 
@@ -83,8 +106,8 @@ def test_should_send_persists_rate_limit_seconds():
 def test_muted_group_never_sends_but_keeps_counting():
     _store._should_send("fp8", "ValueError", "app.py:1", 0)
     _store._set_muted("fp8", True)
-    assert _store._should_send("fp8", "ValueError", "app.py:1", 0) == (False, 0)
-    assert _store._should_send("fp8", "ValueError", "app.py:1", 0) == (False, 0)
+    assert _store._should_send("fp8", "ValueError", "app.py:1", 0) == (False, 0, False)
+    assert _store._should_send("fp8", "ValueError", "app.py:1", 0) == (False, 0, False)
 
 
 def test_unmute_resends_and_reports_accumulated_skip_count():
@@ -93,7 +116,7 @@ def test_unmute_resends_and_reports_accumulated_skip_count():
     _store._should_send("fp9", "ValueError", "app.py:1", 0)
     _store._should_send("fp9", "ValueError", "app.py:1", 0)
     _store._set_muted("fp9", False)
-    assert _store._should_send("fp9", "ValueError", "app.py:1", 0) == (True, 2)
+    assert _store._should_send("fp9", "ValueError", "app.py:1", 0) == (True, 2, False)
 
 
 def test_match_fingerprints_by_prefix():
@@ -122,9 +145,17 @@ def test_clear_all_removes_every_group():
 
 def test_backoff_multiplier_doubles_on_chronic_resend():
     conn = _store._get_connection()
-    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (True, 0)
-    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (False, 0)
-    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (False, 0)
+    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (True, 0, True)
+    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (
+        False,
+        0,
+        False,
+    )
+    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (
+        False,
+        0,
+        False,
+    )
     conn.execute(
         "UPDATE error_groups SET last_sent = ? WHERE fingerprint = ?",
         (time.time() - 150, "fpB"),
@@ -132,7 +163,11 @@ def test_backoff_multiplier_doubles_on_chronic_resend():
     conn.commit()
 
     # Two occurrences piled up while suppressed -- chronic, multiplier doubles.
-    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (True, 2)
+    assert _store._should_send("fpB", "ValueError", "app.py:1", 100) == (
+        True,
+        2,
+        False,
+    )
     row = conn.execute(
         "SELECT backoff_multiplier FROM error_groups WHERE fingerprint = ?", ("fpB",)
     ).fetchone()
@@ -142,15 +177,23 @@ def test_backoff_multiplier_doubles_on_chronic_resend():
 
 def test_backoff_multiplier_extends_effective_window():
     conn = _store._get_connection()
-    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (True, 0)
-    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (False, 0)
+    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (True, 0, True)
+    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (
+        False,
+        0,
+        False,
+    )
     conn.execute(
         "UPDATE error_groups SET last_sent = ? WHERE fingerprint = ?",
         (time.time() - 150, "fpC"),
     )
     conn.commit()
     # Chronic resend: multiplier becomes 2, effective window now 200s.
-    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (True, 1)
+    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (
+        True,
+        1,
+        False,
+    )
 
     # 150s later would have passed the *base* 100s window but not the doubled 200s one.
     conn.execute(
@@ -158,20 +201,32 @@ def test_backoff_multiplier_extends_effective_window():
         (time.time() - 150, "fpC"),
     )
     conn.commit()
-    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (False, 0)
+    assert _store._should_send("fpC", "ValueError", "app.py:1", 100) == (
+        False,
+        0,
+        False,
+    )
     conn.close()
 
 
 def test_backoff_multiplier_resets_after_quiet_spell():
     conn = _store._get_connection()
-    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (True, 0)
-    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (False, 0)
+    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (True, 0, True)
+    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (
+        False,
+        0,
+        False,
+    )
     conn.execute(
         "UPDATE error_groups SET last_sent = ? WHERE fingerprint = ?",
         (time.time() - 150, "fpD"),
     )
     conn.commit()
-    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (True, 1)
+    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (
+        True,
+        1,
+        False,
+    )
     row = conn.execute(
         "SELECT backoff_multiplier FROM error_groups WHERE fingerprint = ?", ("fpD",)
     ).fetchone()
@@ -183,7 +238,11 @@ def test_backoff_multiplier_resets_after_quiet_spell():
         (time.time() - 1000, "fpD"),
     )
     conn.commit()
-    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (True, 0)
+    assert _store._should_send("fpD", "ValueError", "app.py:1", 100) == (
+        True,
+        0,
+        False,
+    )
     row = conn.execute(
         "SELECT backoff_multiplier FROM error_groups WHERE fingerprint = ?", ("fpD",)
     ).fetchone()
@@ -206,7 +265,7 @@ def test_backoff_multiplier_caps_at_max():
     conn.commit()
     conn.close()
 
-    assert _store._should_send("fpE", "ValueError", "app.py:1", 1) == (True, 1)
+    assert _store._should_send("fpE", "ValueError", "app.py:1", 1) == (True, 1, False)
     conn = _store._get_connection()
     row = conn.execute(
         "SELECT backoff_multiplier FROM error_groups WHERE fingerprint = ?", ("fpE",)
@@ -234,5 +293,5 @@ def test_migration_adds_columns_to_pre_existing_db():
     conn.commit()
     conn.close()
 
-    send, skipped = _store._should_send("fp14", "ValueError", "app.py:1", 300)
-    assert (send, skipped) == (True, 0)
+    send, skipped, is_new = _store._should_send("fp14", "ValueError", "app.py:1", 300)
+    assert (send, skipped, is_new) == (True, 0, True)

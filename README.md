@@ -10,9 +10,9 @@
 
 [Русская версия](README.ru.md)
 
-Send unhandled Python exceptions straight to a Telegram chat — the moment
-they happen, on your phone. No backend, no account, no database — just your
-own bot token.
+Send unhandled Python exceptions straight to a Telegram chat (or Slack) —
+the moment they happen, on your phone. No backend, no account, no database —
+just your own bot token or webhook URL.
 
 ```python
 import devalerts
@@ -205,6 +205,60 @@ grouping/rate-limiting/redaction path as everything else, tagged with the
 task name and id automatically. Requires Celery to already be installed in
 the worker process — it's imported lazily, not a devalerts dependency.
 
+## Logged (not raised) exceptions
+
+`init()`'s excepthook only ever sees exceptions that stay unhandled — but most
+real errors are caught and logged instead: `logger.exception(...)` inside a
+`try/except` never propagates anywhere. Attach `LogHandler` to catch those too:
+
+```python
+import logging
+
+logging.getLogger().addHandler(devalerts.LogHandler())
+```
+
+A record with `exc_info` (`logger.exception()`, or `logger.error(...,
+exc_info=True)`) is reported like a full exception alert — grouped by the
+same fingerprint an unhandled instance of it would use, so logging it and
+then re-raising sends one alert, not two. A plain `logger.error("message")`
+with no exception attached is reported as a short text alert, grouped by
+logger name + level + message. Defaults to `level=logging.ERROR`; pass
+`extra={...}` for tags added to every alert from this handler.
+
+## Blame
+
+Curious *who* wrote the line that just blew up? `blame=True` runs `git blame`
+on it and adds the author, short commit hash, and date to the alert:
+
+```python
+devalerts.init(bot_token="...", chat_id=123456789, blame=True)
+```
+
+```
+🕵️ blame: sslinNn · a1b2c3d · 2026-07-15 (3d ago)
+```
+
+Best-effort and silent about it — no git installed, no repo (a container
+image without `.git`), or the line isn't committed yet all just skip the
+line instead of failing the alert. Off by default; opt in with `blame=True`.
+
+## Slack
+
+Prefer Slack, or want both? Pass a Slack incoming webhook URL alongside or
+instead of `bot_token`/`chat_id` — every configured channel gets every alert:
+
+```python
+devalerts.init(slack_webhook_url="https://hooks.slack.com/services/...")
+```
+
+Create one at [api.slack.com/apps](https://api.slack.com/apps) → your app →
+**Incoming Webhooks**. Same grouping/rate-limiting/redaction/blame path as
+Telegram, formatted as Slack mrkdwn instead of HTML. Verify it's wired up:
+
+```
+uv run devalerts test --slack-webhook-url https://hooks.slack.com/services/...
+```
+
 ## Why not Sentry?
 
 If you already run Sentry/Rollbar/etc., keep using it — devalerts isn't a
@@ -238,22 +292,27 @@ Yes — `init()` installs both `sys.excepthook` and `threading.excepthook`.
 Yes — call [`init_celery()`](#celery) in addition to `init()` to catch
 exceptions raised inside tasks, which the excepthook alone won't see.
 
+**Catches exceptions I log but don't re-raise?**
+Yes — add [`LogHandler`](#logged-not-raised-exceptions) to a logger; the
+excepthook alone never sees a caught-and-logged exception.
+
 **Works on Windows / Linux / macOS?**
 Yes — stdlib only (`urllib`, `sqlite3`, `threading`), no OS-specific code
 paths.
 
 ## Privacy & Security
 
-- The only network call devalerts makes is to `api.telegram.org` — no
-  telemetry, no analytics, nothing else phones home.
+- The only network calls devalerts makes are to `api.telegram.org` and/or
+  your configured Slack incoming webhook — no telemetry, no analytics,
+  nothing else phones home.
 - No third-party server and no devalerts-run backend — messages go straight
-  from your process to your own Telegram bot.
-- No accounts, no signup, no API key beyond the bot token you create and
-  control yourself.
+  from your process to your own Telegram bot / Slack webhook.
+- No accounts, no signup, no API key beyond the bot token / webhook URL you
+  create and control yourself.
 - Basic secret redaction only (a few common token/key patterns) — do not
   rely on this for sensitive production data; scrub what you can before it
   ever reaches an exception message.
-- If Telegram delivery fails after retrying, the alert (already redacted, if
+- If delivery fails after retrying, the alert (already redacted, if
   `redact=True`) is appended to `~/.devalerts/failed.log` instead of being
   dropped — clean it up like any other local log file.
 
@@ -266,7 +325,6 @@ paths.
 ## Roadmap
 
 - Web dashboard (hosted, optional — the local CLI dashboard stays either way)
-- Slack delivery
 - Discord delivery
 - Email delivery
 

@@ -24,6 +24,14 @@ def _fingerprint(exc_type, tb) -> tuple[str, str]:
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16], location
 
 
+def _fingerprint_log(
+    logger_name: str, level: int, msg: str, pathname: str, lineno: int
+) -> tuple[str, str]:
+    location = f"{pathname}:{lineno}"
+    raw = f"{logger_name}:{level}:{msg}:{location}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16], location
+
+
 def _get_connection() -> sqlite3.Connection:
     _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(_DB_PATH, timeout=5)
@@ -62,7 +70,7 @@ def _get_connection() -> sqlite3.Connection:
 
 def _should_send(
     fingerprint: str, exc_type_name: str, location: str, rate_limit_seconds: int
-) -> tuple[bool, int]:
+) -> tuple[bool, int, bool]:
     now = time.time()
     try:
         conn = _get_connection()
@@ -73,6 +81,7 @@ def _should_send(
                     "FROM error_groups WHERE fingerprint = ?",
                     (fingerprint,),
                 ).fetchone()
+                is_new = row is None
                 muted = bool(row[2]) if row else False
                 multiplier = row[3] if row else 1
                 effective_window = rate_limit_seconds * multiplier
@@ -130,7 +139,7 @@ def _should_send(
                     "DELETE FROM error_groups WHERE last_seen < ?",
                     (now - _RETENTION_SECONDS,),
                 )
-            return send, skipped
+            return send, skipped, is_new
         finally:
             conn.close()
     except (sqlite3.Error, OSError) as error:
@@ -140,7 +149,7 @@ def _should_send(
             f"devalerts: dedup/rate-limit state error, sending anyway: {error}",
             file=sys.stderr,
         )
-        return True, 0
+        return True, 0, True
 
 
 def _match_fingerprints(prefix: str) -> list[str]:

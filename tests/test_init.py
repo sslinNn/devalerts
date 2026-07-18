@@ -155,11 +155,137 @@ def test_init_defaults_tags_to_empty_dict():
     assert devalerts._state["tags"] == {}
 
 
+def test_init_defaults_blame_to_false():
+    devalerts.init("token", 1)
+    assert devalerts._state["blame"] is False
+
+
+def test_init_stores_blame():
+    devalerts.init("token", 1, blame=True)
+    assert devalerts._state["blame"] is True
+    # init() mutates module-level state directly (not via monkeypatch) --
+    # reset it so later tests don't inherit blame=True and spawn real `git
+    # blame` subprocesses against this repo's own tracked test files.
+    devalerts._state["blame"] = False
+
+
+def test_report_skips_git_blame_lookup_by_default(isolated, monkeypatch):
+    monkeypatch.setitem(devalerts._state, "blame", False)
+    calls = []
+    monkeypatch.setattr(
+        devalerts, "_git_blame_for_traceback", lambda tb: calls.append(tb) or "x"
+    )
+    devalerts.report(ValueError("boom"))
+    assert calls == []
+    assert "blame" not in isolated[0]
+
+
+def test_report_marks_first_occurrence_as_new(isolated):
+    devalerts.report(ValueError("brand new"))
+    assert "New error" in isolated[0]
+
+
+def test_report_does_not_mark_repeat_occurrence_as_new(isolated, monkeypatch):
+    monkeypatch.setitem(devalerts._state, "rate_limit_seconds", 0)
+
+    def _boom():
+        raise ValueError("seen before")
+
+    try:
+        _boom()
+    except ValueError as exc:
+        devalerts.report(exc)
+    try:
+        _boom()
+    except ValueError as exc:
+        devalerts.report(exc)
+
+    assert "New error" in isolated[0]
+    assert "New error" not in isolated[1]
+
+
+def test_report_includes_blame_when_enabled(isolated, monkeypatch):
+    monkeypatch.setitem(devalerts._state, "blame", True)
+    monkeypatch.setattr(
+        devalerts,
+        "_git_blame_for_traceback",
+        lambda tb: "sslinNn · a1b2c3d · 2026-07-15 (3d ago)",
+    )
+    devalerts.report(ValueError("boom"))
+    assert "blame: sslinNn · a1b2c3d · 2026-07-15 (3d ago)" in isolated[0]
+
+
 def test_init_twice_does_not_chain_to_own_excepthook():
     original_hook = sys.excepthook
     devalerts.init("token", 1)
     devalerts.init("token", 1)
     assert devalerts._state["prev_excepthook"] is original_hook
+
+
+def test_init_stores_slack_webhook_url():
+    devalerts.init(slack_webhook_url="https://hooks.slack.com/services/x")
+    assert devalerts._state["slack_webhook_url"] == "https://hooks.slack.com/services/x"
+    assert devalerts._state["bot_token"] is None
+    # init() mutates module-level state directly (not via monkeypatch) --
+    # reset it so later tests (in this file and others) don't inherit a
+    # live slack_webhook_url and make real HTTP calls on every alert.
+    devalerts._state["slack_webhook_url"] = None
+
+
+def test_init_rejects_bot_token_without_chat_id():
+    with pytest.raises(ValueError, match="together"):
+        devalerts.init(bot_token="token")
+
+
+def test_init_rejects_chat_id_without_bot_token():
+    with pytest.raises(ValueError, match="together"):
+        devalerts.init(chat_id=1)
+
+
+def test_init_rejects_no_channel_configured():
+    with pytest.raises(ValueError, match="requires"):
+        devalerts.init()
+
+
+def test_report_delivers_to_both_telegram_and_slack(isolated, monkeypatch):
+    monkeypatch.setitem(
+        devalerts._state, "slack_webhook_url", "https://hooks.slack.com/services/x"
+    )
+    slack_sent = []
+    monkeypatch.setattr(
+        devalerts,
+        "_send_slack_message",
+        lambda webhook_url, text: slack_sent.append(text),
+    )
+
+    devalerts.report(ValueError("dual channel"))
+
+    assert len(isolated) == 1
+    assert "ValueError: dual channel" in isolated[0]
+    assert len(slack_sent) == 1
+    assert "ValueError: dual channel" in slack_sent[0]
+    assert "*🔴 ValueError: dual channel*" in slack_sent[0]
+
+
+def test_report_delivers_to_slack_only_when_telegram_not_configured(
+    isolated, monkeypatch
+):
+    monkeypatch.setitem(devalerts._state, "bot_token", None)
+    monkeypatch.setitem(devalerts._state, "chat_id", None)
+    monkeypatch.setitem(
+        devalerts._state, "slack_webhook_url", "https://hooks.slack.com/services/x"
+    )
+    slack_sent = []
+    monkeypatch.setattr(
+        devalerts,
+        "_send_slack_message",
+        lambda webhook_url, text: slack_sent.append(text),
+    )
+
+    devalerts.report(ValueError("slack only"))
+
+    assert isolated == []
+    assert len(slack_sent) == 1
 
 
 def test_asgi_middleware_passes_through_successful_requests(isolated):
