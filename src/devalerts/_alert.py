@@ -10,6 +10,8 @@ _MAX_MESSAGE_LENGTH = 4096
 
 
 def _escape_html(text: str) -> str:
+    """Escapes &, <, > -- required by both Telegram's HTML parse mode and Slack's
+    mrkdwn, which use the same three characters for their own markup."""
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
@@ -60,6 +62,57 @@ def _format_alert(
     return (
         f"{escaped_header}\n\n<blockquote expandable>{_escape_html(body)}</blockquote>"
     )
+
+
+def _format_alert_slack(
+    exc_type,
+    exc_value,
+    tb,
+    skipped: int = 0,
+    tags: dict[str, str] | None = None,
+    blame: str | None = None,
+    is_new: bool = False,
+) -> str:
+    header = f"*\U0001f534 {exc_type.__name__}: {exc_value}*\n{_format_context(tags)}"
+    if is_new:
+        header = f"🆕 New error\n{header}"
+    if blame:
+        header += f"\n🕵️ blame: {blame}"
+    if skipped:
+        header += f"\n⚠️ Повторилась ещё {skipped} раз(а) с последнего алерта"
+    body = "".join(traceback.format_exception(exc_type, exc_value, tb))
+
+    fence = "```"
+    if len(header) + 2 + len(fence) * 2 + len(body) > _MAX_MESSAGE_LENGTH:
+        marker = "\n\n...(truncated)...\n"
+        keep = max(
+            _MAX_MESSAGE_LENGTH - len(header) - 2 - len(fence) * 2 - len(marker), 0
+        )
+        body = f"{marker}{body[-keep:]}" if keep else ""
+        header = header[:_MAX_MESSAGE_LENGTH]
+
+    escaped_header = _escape_html(header)
+    if not body:
+        return escaped_header
+    return f"{escaped_header}\n\n{fence}{_escape_html(body)}{fence}"
+
+
+def _format_log_alert_slack(
+    logger_name: str,
+    level_name: str,
+    message: str,
+    skipped: int = 0,
+    tags: dict[str, str] | None = None,
+    is_new: bool = False,
+) -> str:
+    header = (
+        f"*\U0001f534 {logger_name} ({level_name}): {message}*\n{_format_context(tags)}"
+    )
+    if is_new:
+        header = f"🆕 New error\n{header}"
+    if skipped:
+        header += f"\n⚠️ Повторилась ещё {skipped} раз(а) с последнего алерта"
+    return _escape_html(header[:_MAX_MESSAGE_LENGTH])
 
 
 def _format_log_alert(

@@ -96,6 +96,62 @@ def test_test_command_failure(monkeypatch, capsys):
     assert "Failed to send test message" in capsys.readouterr().err
 
 
+def test_test_command_slack_success(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_send_slack_message", lambda webhook_url, text: True)
+
+    exit_code = cli.main(
+        ["test", "--slack-webhook-url", "https://hooks.slack.com/services/x"]
+    )
+
+    assert exit_code == 0
+    assert "Test message sent" in capsys.readouterr().out
+
+
+def test_test_command_both_channels(monkeypatch, capsys):
+    telegram_calls = []
+    slack_calls = []
+    monkeypatch.setattr(
+        cli,
+        "_send_telegram_message",
+        lambda token, chat_id, text: telegram_calls.append(text) or True,
+    )
+    monkeypatch.setattr(
+        cli,
+        "_send_slack_message",
+        lambda webhook_url, text: slack_calls.append(text) or True,
+    )
+
+    exit_code = cli.main(
+        [
+            "test",
+            "--bot-token",
+            "TOKEN",
+            "--chat-id",
+            "123",
+            "--slack-webhook-url",
+            "https://hooks.slack.com/services/x",
+        ]
+    )
+
+    assert exit_code == 0
+    assert len(telegram_calls) == 1
+    assert len(slack_calls) == 1
+
+
+def test_test_command_rejects_bot_token_without_chat_id(capsys):
+    exit_code = cli.main(["test", "--bot-token", "TOKEN"])
+
+    assert exit_code == 1
+    assert "must be given together" in capsys.readouterr().err
+
+
+def test_test_command_rejects_no_channel_configured(capsys):
+    exit_code = cli.main(["test"])
+
+    assert exit_code == 1
+    assert "Provide --bot-token" in capsys.readouterr().err
+
+
 def test_version_flag_prints_installed_version(capsys):
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["--version"])

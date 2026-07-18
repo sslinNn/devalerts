@@ -6,6 +6,12 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- `devalerts.init(slack_webhook_url=...)`: Slack delivery via an incoming
+  webhook, alongside or instead of Telegram -- every configured channel
+  gets every alert. Same fingerprint/dedup/rate-limit/redaction/blame path
+  as Telegram; Slack gets mrkdwn formatting instead of HTML. `devalerts
+  test` and `bot_token`/`chat_id` are now independently optional (at least
+  one channel is still required, enforced at `init()` time).
 - Alerts now mark the first-ever occurrence of an error group with a `🆕
   New error` badge, so a genuinely new bug stands out from a chronic one
   that just came back out of its rate-limit window.

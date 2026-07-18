@@ -9,9 +9,16 @@ import threading
 from types import TracebackType
 from typing import Callable, Literal, Optional, TypedDict
 
-from ._alert import _format_alert, _format_log_alert, _redact
+from ._alert import (
+    _format_alert,
+    _format_alert_slack,
+    _format_log_alert,
+    _format_log_alert_slack,
+    _redact,
+)
 from ._blame import _git_blame_for_traceback
 from ._celery import init_celery
+from ._slack import _send_slack_message
 from ._store import (
     _DEFAULT_RATE_LIMIT_SECONDS,
     _fingerprint,
@@ -38,6 +45,7 @@ _ThreadingExceptHook = Callable[[threading.ExceptHookArgs], object]
 class _State(TypedDict):
     bot_token: str | None
     chat_id: int | str | None
+    slack_webhook_url: str | None
     redact: bool
     rate_limit_seconds: int
     tags: dict[str, str]
@@ -53,6 +61,7 @@ class _State(TypedDict):
 _state: _State = {
     "bot_token": None,
     "chat_id": None,
+    "slack_webhook_url": None,
     "redact": True,
     "rate_limit_seconds": _DEFAULT_RATE_LIMIT_SECONDS,
     "tags": {},
@@ -62,10 +71,32 @@ _state: _State = {
 }
 
 
+def _configured() -> bool:
+    return bool(
+        (_state["bot_token"] and _state["chat_id"]) or _state["slack_webhook_url"]
+    )
+
+
+def _deliver(format_telegram, format_slack) -> None:
+    """Formats and sends to every channel init() configured -- each channel gets its
+    own formatting call since Telegram (HTML) and Slack (mrkdwn) need different
+    markup, but both share the same fingerprint/dedup decision made by the caller."""
+    if _state["bot_token"] and _state["chat_id"]:
+        message = format_telegram()
+        if _state["redact"]:
+            message = _redact(message)
+        _send_telegram_message(_state["bot_token"], _state["chat_id"], message)
+    if _state["slack_webhook_url"]:
+        message = format_slack()
+        if _state["redact"]:
+            message = _redact(message)
+        _send_slack_message(_state["slack_webhook_url"], message)
+
+
 def _send_exception(
     exc_type, exc_value, tb, extra: dict[str, str] | None = None
 ) -> None:
-    if _state["bot_token"] is None or _state["chat_id"] is None:
+    if not _configured():
         print("devalerts: init() was not called, dropping alert", file=sys.stderr)
         return
     fingerprint, location = _fingerprint(exc_type, tb)
@@ -76,16 +107,30 @@ def _send_exception(
         return
     tags = {**_state["tags"], **(extra or {})}
     blame = _git_blame_for_traceback(tb) if _state["blame"] else None
-    message = _format_alert(
-        exc_type, exc_value, tb, skipped=skipped, tags=tags, blame=blame, is_new=is_new
+    _deliver(
+        lambda: _format_alert(
+            exc_type,
+            exc_value,
+            tb,
+            skipped=skipped,
+            tags=tags,
+            blame=blame,
+            is_new=is_new,
+        ),
+        lambda: _format_alert_slack(
+            exc_type,
+            exc_value,
+            tb,
+            skipped=skipped,
+            tags=tags,
+            blame=blame,
+            is_new=is_new,
+        ),
     )
-    if _state["redact"]:
-        message = _redact(message)
-    _send_telegram_message(_state["bot_token"], _state["chat_id"], message)
 
 
 def _send_log(record: logging.LogRecord, extra: dict[str, str] | None = None) -> None:
-    if _state["bot_token"] is None or _state["chat_id"] is None:
+    if not _configured():
         print("devalerts: init() was not called, dropping alert", file=sys.stderr)
         return
     fingerprint, location = _fingerprint_log(
@@ -97,17 +142,24 @@ def _send_log(record: logging.LogRecord, extra: dict[str, str] | None = None) ->
     if not send:
         return
     tags = {**_state["tags"], **(extra or {})}
-    message = _format_log_alert(
-        record.name,
-        record.levelname,
-        record.getMessage(),
-        skipped=skipped,
-        tags=tags,
-        is_new=is_new,
+    _deliver(
+        lambda: _format_log_alert(
+            record.name,
+            record.levelname,
+            record.getMessage(),
+            skipped=skipped,
+            tags=tags,
+            is_new=is_new,
+        ),
+        lambda: _format_log_alert_slack(
+            record.name,
+            record.levelname,
+            record.getMessage(),
+            skipped=skipped,
+            tags=tags,
+            is_new=is_new,
+        ),
     )
-    if _state["redact"]:
-        message = _redact(message)
-    _send_telegram_message(_state["bot_token"], _state["chat_id"], message)
 
 
 def _excepthook(exc_type, exc_value, tb) -> None:
@@ -133,21 +185,29 @@ def _threading_excepthook(args) -> None:
 
 
 def init(
-    bot_token: str,
-    chat_id: int | str,
+    bot_token: str | None = None,
+    chat_id: int | str | None = None,
     *,
+    slack_webhook_url: str | None = None,
     redact: bool = True,
     rate_limit_seconds: int = _DEFAULT_RATE_LIMIT_SECONDS,
     tags: dict[str, str] | None = None,
     blame: bool = False,
 ) -> None:
-    """Install a global exception hook that sends unhandled exceptions to Telegram.
+    """Install a global exception hook that sends unhandled exceptions to Telegram
+    and/or Slack. Requires ``bot_token``+``chat_id``, ``slack_webhook_url``, or both
+    -- configured channels all receive every alert.
 
     ``blame=True`` runs ``git blame`` on the line that raised and adds the
     author/commit/date to the alert -- best-effort, silently skipped if
     there's no git repo (e.g. a container image without ``.git``)."""
+    if bool(bot_token) != bool(chat_id):
+        raise ValueError("bot_token and chat_id must be given together")
+    if not bot_token and not slack_webhook_url:
+        raise ValueError("init() requires bot_token+chat_id and/or slack_webhook_url")
     _state["bot_token"] = bot_token
     _state["chat_id"] = chat_id
+    _state["slack_webhook_url"] = slack_webhook_url
     _state["redact"] = redact
     _state["rate_limit_seconds"] = rate_limit_seconds
     _state["tags"] = tags or {}

@@ -1,7 +1,12 @@
 import socket
 
 from devalerts import _alert
-from devalerts._alert import _MAX_MESSAGE_LENGTH, _format_alert, _redact
+from devalerts._alert import (
+    _MAX_MESSAGE_LENGTH,
+    _format_alert,
+    _format_alert_slack,
+    _redact,
+)
 
 
 def _make_tb(msg="boom"):
@@ -63,6 +68,26 @@ def test_format_alert_no_new_marker_by_default():
     exc_type, exc_value, tb = _make_tb()
     message = _format_alert(exc_type, exc_value, tb)
     assert "New error" not in message
+
+
+def test_format_alert_slack_includes_type_and_message():
+    exc_type, exc_value, tb = _make_tb("something broke")
+    message = _format_alert_slack(exc_type, exc_value, tb)
+    assert "ValueError: something broke" in message
+    assert "Traceback" in message
+
+
+def test_format_alert_slack_wraps_traceback_in_code_fence():
+    exc_type, exc_value, tb = _make_tb()
+    message = _format_alert_slack(exc_type, exc_value, tb)
+    assert "```" in message
+    assert message.endswith("```")
+
+
+def test_format_alert_slack_bolds_the_header_line():
+    exc_type, exc_value, tb = _make_tb()
+    message = _format_alert_slack(exc_type, exc_value, tb)
+    assert message.startswith("*🔴 ValueError:")
 
 
 def test_format_alert_truncates_long_body(monkeypatch):

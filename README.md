@@ -10,9 +10,9 @@
 
 [Русская версия](README.ru.md)
 
-Send unhandled Python exceptions straight to a Telegram chat — the moment
-they happen, on your phone. No backend, no account, no database — just your
-own bot token.
+Send unhandled Python exceptions straight to a Telegram chat (or Slack) —
+the moment they happen, on your phone. No backend, no account, no database —
+just your own bot token or webhook URL.
 
 ```python
 import devalerts
@@ -242,6 +242,23 @@ Best-effort and silent about it — no git installed, no repo (a container
 image without `.git`), or the line isn't committed yet all just skip the
 line instead of failing the alert. Off by default; opt in with `blame=True`.
 
+## Slack
+
+Prefer Slack, or want both? Pass a Slack incoming webhook URL alongside or
+instead of `bot_token`/`chat_id` — every configured channel gets every alert:
+
+```python
+devalerts.init(slack_webhook_url="https://hooks.slack.com/services/...")
+```
+
+Create one at [api.slack.com/apps](https://api.slack.com/apps) → your app →
+**Incoming Webhooks**. Same grouping/rate-limiting/redaction/blame path as
+Telegram, formatted as Slack mrkdwn instead of HTML. Verify it's wired up:
+
+```
+uv run devalerts test --slack-webhook-url https://hooks.slack.com/services/...
+```
+
 ## Why not Sentry?
 
 If you already run Sentry/Rollbar/etc., keep using it — devalerts isn't a
@@ -285,16 +302,17 @@ paths.
 
 ## Privacy & Security
 
-- The only network call devalerts makes is to `api.telegram.org` — no
-  telemetry, no analytics, nothing else phones home.
+- The only network calls devalerts makes are to `api.telegram.org` and/or
+  your configured Slack incoming webhook — no telemetry, no analytics,
+  nothing else phones home.
 - No third-party server and no devalerts-run backend — messages go straight
-  from your process to your own Telegram bot.
-- No accounts, no signup, no API key beyond the bot token you create and
-  control yourself.
+  from your process to your own Telegram bot / Slack webhook.
+- No accounts, no signup, no API key beyond the bot token / webhook URL you
+  create and control yourself.
 - Basic secret redaction only (a few common token/key patterns) — do not
   rely on this for sensitive production data; scrub what you can before it
   ever reaches an exception message.
-- If Telegram delivery fails after retrying, the alert (already redacted, if
+- If delivery fails after retrying, the alert (already redacted, if
   `redact=True`) is appended to `~/.devalerts/failed.log` instead of being
   dropped — clean it up like any other local log file.
 
@@ -307,7 +325,6 @@ paths.
 ## Roadmap
 
 - Web dashboard (hosted, optional — the local CLI dashboard stays either way)
-- Slack delivery
 - Discord delivery
 - Email delivery
 
