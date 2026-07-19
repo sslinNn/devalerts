@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [0.4.0] - 2026-07-19
+
+### Added
+
+- `devalerts dashboard` now reports a "crash streak" line -- days since the
+  last recorded incident, sent or suppressed (`🟢 14 days since the last
+  incident.` / `🔴 New incident 3h ago -- streak reset to 0 days.`).
+- `devalerts badge [--out PATH] [--label TEXT]`: renders that same streak as
+  a shields.io-style SVG badge, for embedding in a README. No network call,
+  no hosting -- writes a local file you commit yourself (e.g. from a
+  scheduled GitHub Actions job).
+
 ## [0.3.0] - 2026-07-19
 
 ### Added

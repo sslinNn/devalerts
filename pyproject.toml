@@ -1,6 +1,6 @@
 [project]
 name = "devalerts"
-version = "0.3.0"
+version = "0.4.0"
 description = "Send unhandled Python exceptions straight to a Telegram chat (or Slack). No backend, no account, no database — just your own bot token or webhook URL."
 readme = "README.md"
 license = "MIT"
