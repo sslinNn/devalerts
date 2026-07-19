@@ -112,6 +112,34 @@ resend doubles the effective `rate_limit_seconds` for that group (capped at
 forever. A group that goes quiet and reappears once resets to the base rate
 immediately. The dashboard shows the active multiplier (`● sending ×4`).
 
+## Crash streak badge
+
+`devalerts dashboard` also reports how long it's been since the last
+recorded incident (sent or suppressed by rate-limiting) — same idea as the
+classic "days since last workplace accident" sign, applied to your crashes:
+
+```
+🟢 14 days since the last incident.
+```
+
+Get the same number as a shareable SVG badge for your README:
+
+```
+uv run devalerts badge --out docs/streak.svg
+```
+
+![devalerts crash streak badge](https://raw.githubusercontent.com/sslinNn/devalerts/main/docs/streak-badge.svg)
+
+No hosting, no cron job built in — regenerate and commit it yourself,
+e.g. on a schedule with GitHub Actions:
+
+```yaml
+- run: uv run devalerts badge --out docs/streak.svg
+- run: git add docs/streak.svg && git commit -m "Update crash streak badge" || true
+```
+
+Pass `--label` to customize the left-hand text (default `"crash streak"`).
+
 ## Context: hostname and tags
 
 Every alert automatically includes the sending host, so you can tell which

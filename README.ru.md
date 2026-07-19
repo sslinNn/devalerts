@@ -116,6 +116,36 @@ uv run devalerts clear abc12345   # или: devalerts clear --all
 появилась один раз без накопления, сразу сбрасывается на базовую частоту.
 Дашборд показывает активный множитель (`● sending ×4`).
 
+## Бейдж «дней без инцидента»
+
+`devalerts dashboard` также сообщает, сколько времени прошло с последнего
+зафиксированного инцидента (отправленного или подавленного rate-limit'ом) —
+та же идея, что и классический плакат «X дней без происшествий на
+производстве», только про краши:
+
+```
+🟢 14 days since the last incident.
+```
+
+Тот же счётчик — как шарящийся SVG-бейдж для README:
+
+```
+uv run devalerts badge --out docs/streak.svg
+```
+
+![бейдж crash streak devalerts](https://raw.githubusercontent.com/sslinNn/devalerts/main/docs/streak-badge.svg)
+
+Хостинга и крон-джобы devalerts не предоставляет — перегенерировать и
+закоммитить бейдж нужно самостоятельно, например по расписанию через
+GitHub Actions:
+
+```yaml
+- run: uv run devalerts badge --out docs/streak.svg
+- run: git add docs/streak.svg && git commit -m "Update crash streak badge" || true
+```
+
+Флаг `--label` меняет левую часть текста (по умолчанию `"crash streak"`).
+
 ## Контекст: hostname и теги
 
 Каждый алерт автоматически включает имя хоста-отправителя — удобно понять,

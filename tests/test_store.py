@@ -274,6 +274,27 @@ def test_backoff_multiplier_caps_at_max():
     conn.close()
 
 
+def test_last_incident_returns_none_when_no_groups_recorded():
+    assert _store._last_incident() is None
+
+
+def test_last_incident_returns_max_last_seen_across_groups():
+    _store._should_send("fpS1", "ValueError", "app.py:1", 300)
+    _store._should_send("fpS2", "TypeError", "app.py:2", 300)
+    conn = _store._get_connection()
+    conn.execute(
+        "UPDATE error_groups SET last_seen = ? WHERE fingerprint = ?",
+        (time.time() - 1000, "fpS1"),
+    )
+    conn.commit()
+    newer = conn.execute(
+        "SELECT last_seen FROM error_groups WHERE fingerprint = 'fpS2'"
+    ).fetchone()[0]
+    conn.close()
+
+    assert _store._last_incident() == newer
+
+
 def test_migration_adds_columns_to_pre_existing_db():
     conn = sqlite3.connect(_store._DB_PATH)
     conn.execute(
