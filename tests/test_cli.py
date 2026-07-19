@@ -318,3 +318,58 @@ def test_clear_unknown_fingerprint_fails(capsys):
     exit_code = cli.main(["clear", "nosuchfp"])
     assert exit_code == 1
     assert "No error group matches" in capsys.readouterr().err
+
+
+def test_dashboard_shows_green_streak_for_old_incident(capsys):
+    _store._should_send("fp", "ValueError", "app.py:1", rate_limit_seconds=300)
+    conn = sqlite3.connect(cli._DB_PATH)
+    conn.execute(
+        "UPDATE error_groups SET last_seen = ? WHERE fingerprint = ?",
+        (time.time() - 10 * 86400, "fp"),
+    )
+    conn.commit()
+    conn.close()
+
+    assert cli._dashboard() == 0
+    assert "10 days since the last incident" in capsys.readouterr().out
+
+
+def test_dashboard_shows_reset_for_recent_incident(capsys):
+    _store._should_send("fp", "ValueError", "app.py:1", rate_limit_seconds=300)
+
+    assert cli._dashboard() == 0
+    assert "streak reset to 0 days" in capsys.readouterr().out
+
+
+def test_badge_command_prints_svg_to_stdout_when_no_incidents(capsys):
+    assert cli.main(["badge"]) == 0
+    output = capsys.readouterr().out
+    assert "<svg" in output
+    assert "no incidents yet" in output
+
+
+def test_badge_command_writes_to_file(tmp_path, capsys):
+    out_path = tmp_path / "streak.svg"
+
+    assert cli.main(["badge", "--out", str(out_path)]) == 0
+    assert "<svg" in out_path.read_text(encoding="utf-8")
+    assert f"Wrote badge to {out_path}." in capsys.readouterr().out
+
+
+def test_badge_reflects_days_since_last_incident(capsys):
+    _store._should_send("fp", "ValueError", "app.py:1", rate_limit_seconds=300)
+    conn = sqlite3.connect(cli._DB_PATH)
+    conn.execute(
+        "UPDATE error_groups SET last_seen = ? WHERE fingerprint = ?",
+        (time.time() - 3 * 86400, "fp"),
+    )
+    conn.commit()
+    conn.close()
+
+    assert cli.main(["badge"]) == 0
+    assert "3 days" in capsys.readouterr().out
+
+
+def test_badge_command_custom_label(capsys):
+    assert cli.main(["badge", "--label", "uptime"]) == 0
+    assert "uptime" in capsys.readouterr().out

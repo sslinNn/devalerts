@@ -1,6 +1,7 @@
 """CLI: `devalerts dashboard` reports grouped/rate-limited errors from the local
 state DB; `devalerts test` sends a one-off message to verify bot_token/chat_id
-and/or slack_webhook_url."""
+and/or slack_webhook_url; `devalerts badge` renders a 'days since last
+incident' SVG badge."""
 
 from __future__ import annotations
 
@@ -11,13 +12,16 @@ import sqlite3
 import sys
 import time
 from importlib.metadata import version as _pkg_version
+from pathlib import Path
 
+from ._badge import _render_badge, _streak_band
 from ._slack import _send_slack_message
 from ._store import (
     _DB_PATH,
     _DEFAULT_RATE_LIMIT_SECONDS,
     _clear,
     _clear_all,
+    _last_incident,
     _match_fingerprints,
     _set_muted,
 )
@@ -52,6 +56,23 @@ def _relative_time(ts: float, now: float) -> str:
     if delta < 86400:
         return f"{int(delta // 3600)}h ago"
     return f"{int(delta // 86400)}d ago"
+
+
+def _streak_line(last_incident: float, now: float, unicode_ok: bool) -> str:
+    days = int((now - last_incident) // 86400)
+    band = _streak_band(days)
+    icons = (
+        {"red": "🔴", "yellow": "🟡", "green": "🟢"}
+        if unicode_ok
+        else {"red": "[RESET]", "yellow": "[WARN]", "green": "[OK]"}
+    )
+    if band == "red":
+        return (
+            f"{icons['red']} New incident {_relative_time(last_incident, now)}"
+            " — streak reset to 0 days."
+        )
+    plural = "" if days == 1 else "s"
+    return f"{icons[band]} {days} day{plural} since the last incident."
 
 
 def _color_enabled() -> bool:
@@ -157,6 +178,9 @@ def _dashboard(as_json: bool = False) -> int:
     ellipsis = "…" if unicode_ok else "..."
     times_char = "×" if unicode_ok else "x"
 
+    print(_streak_line(rows[0][3], now, unicode_ok))
+    print()
+
     style = _Style(_color_enabled())
     type_width = max(len("TYPE"), *(len(r[1]) for r in rows))
 
@@ -255,6 +279,18 @@ def _clear_command(prefix: str | None, clear_all: bool) -> int:
     return 0
 
 
+def _badge_command(out: str | None, label: str) -> int:
+    incident = _last_incident()
+    days = int((time.time() - incident) // 86400) if incident is not None else None
+    svg = _render_badge(label, days)
+    if out:
+        Path(out).write_text(svg, encoding="utf-8")
+        print(f"Wrote badge to {out}.")
+    else:
+        print(svg)
+    return 0
+
+
 def _test(
     bot_token: str | None, chat_id: str | None, slack_webhook_url: str | None
 ) -> int:
@@ -330,6 +366,17 @@ def main(argv: list[str] | None = None) -> int:
     clear_target.add_argument(
         "--all", action="store_true", help="Delete all error groups"
     )
+    badge_parser = subparsers.add_parser(
+        "badge", help="Print or write an SVG 'days since last incident' badge"
+    )
+    badge_parser.add_argument(
+        "--out", help="Write the SVG to this path instead of stdout"
+    )
+    badge_parser.add_argument(
+        "--label",
+        default="crash streak",
+        help="Badge label text (default: 'crash streak')",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "dashboard":
@@ -342,6 +389,8 @@ def main(argv: list[str] | None = None) -> int:
         return _mute_command(args.fingerprint, muted=False)
     if args.command == "clear":
         return _clear_command(args.fingerprint, args.all)
+    if args.command == "badge":
+        return _badge_command(args.out, args.label)
     return 1
 
 

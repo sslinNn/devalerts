@@ -152,6 +152,18 @@ def _should_send(
         return True, 0, True
 
 
+def _last_incident() -> float | None:
+    """Unix timestamp of the most recent occurrence across all groups (sent or
+    suppressed -- last_seen is updated either way), or None if the state DB
+    has no groups recorded (fresh install, or everything cleared)."""
+    conn = _get_connection()
+    try:
+        row = conn.execute("SELECT MAX(last_seen) FROM error_groups").fetchone()
+    finally:
+        conn.close()
+    return row[0]
+
+
 def _match_fingerprints(prefix: str) -> list[str]:
     """Fingerprints starting with prefix, for CLI mute/unmute/clear commands."""
     conn = _get_connection()
